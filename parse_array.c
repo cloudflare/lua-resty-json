@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include "parser.h"
 
+static const char* syntax_err = "Array syntax error, expect ',' or ']'";
 static int
 emit_array(parser_t* parser) {
     composite_state_t* top = pstack_top(parser->parse_stack);
@@ -86,7 +87,7 @@ parse_array_elmt(parser_t* parser, scaner_t* scaner, token_t* tk) {
             return PAE_CLOSE;
     }
 
-    set_parser_err(parser, "array syntax error");
+    set_parser_err(parser, syntax_err);
     return PAE_ERR;
 }
 
@@ -177,7 +178,7 @@ parse_array(parser_t* parser) {
     }
 
 err_out:
-    set_parser_err(parser, "array syntax error");
+    set_parser_err(parser, syntax_err);
     return 0;
 }
 

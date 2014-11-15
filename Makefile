@@ -17,4 +17,8 @@ libljson.so : ${OBJ}
 a.out : libljson.so demo.o
 	$(CC) $(CFLAGS) -Wl,-rpath=./ demo.o -L. -lljson -o $@
 
+test :
+	$(MAKE) -C tests
+
 clean:; rm -f *.o *.so a.out *.d dep.txt
+

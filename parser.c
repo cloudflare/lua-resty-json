@@ -191,17 +191,17 @@ parse(parser_t* parser, const char* json,  uint32_t json_len) {
      *    (i.e. array/hashtab).
      */
     if (tk_ty == TT_CHAR) {
+        int succ = 0;
         char c = tk->char_val;
         if (c == '{') {
-            start_parsing_hashtab(parser);
+            succ = start_parsing_hashtab(parser);
         } else if (c == '[') {
-            start_parsing_array(parser);
+            succ = start_parsing_array(parser);
         } else {
             set_parser_err_fmt(parser, "Unknow object starting with '%c'", c);
             return 0;
         }
 
-        int succ = 1;
         while (succ) {
             composite_state_t* top = pstack_top(pstack);
             if (top->obj_ty == OT_HASHTAB) {
@@ -313,6 +313,9 @@ jp_destroy(struct json_parser* p) {
  */
 void __attribute__((format(printf, 2, 3), cold))
 set_parser_err_fmt(parser_t* parser, const char* fmt, ...) {
+    if (parser->err_msg)
+        return;
+
     int buf_len = 250;
     char* buf = MEMPOOL_ALLOC_TYPE_N(parser->mempool, char, buf_len);
     if (!buf) {
@@ -323,6 +326,15 @@ set_parser_err_fmt(parser_t* parser, const char* fmt, ...) {
 
     scaner_t* scaner = parser->scaner;
     if (scaner) {
+        /* In case error take place in scaner, we should go for scaner's
+         * error message.
+         */
+
+        if (scaner->err_msg) {
+            snprintf(buf, buf_len, "%s", scaner->err_msg);
+            return;
+        }
+
         int loc_info_len = snprintf(buf, buf_len, "(line:%d,col:%d) ",
                                     scaner->line_num, scaner->col_num);
         buf += loc_info_len;
@@ -337,7 +349,8 @@ set_parser_err_fmt(parser_t* parser, const char* fmt, ...) {
 
 void __attribute__((cold))
 set_parser_err(parser_t* parser, const char* str) {
-    set_parser_err_fmt(parser, "%s", str);
+    if (!parser->err_msg)
+        set_parser_err_fmt(parser, "%s", str);
 }
 
 static void __attribute__((cold))

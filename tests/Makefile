@@ -9,6 +9,7 @@ PROGRAM = unit_test
 .PHONY = all test
 
 all : $(PROGRAM)
+	./$(PROGRAM)
 
 $(PROGRAM) : $(OBJ) ../libljson.so
 	$(CXX) $(OBJ) $(LDFLAGS) -o $@

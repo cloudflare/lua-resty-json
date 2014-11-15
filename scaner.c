@@ -7,6 +7,8 @@
 #include "util.h"
 #include "scaner.h"
 
+static const char* unrecog_token = "Unrecognizable token";
+
 /* Forward decl */
 static void __attribute__((format(printf, 3, 4), cold))
 set_scan_err_fmt(scaner_t* scaner, const char* loc, const char* fmt, ...);
@@ -21,10 +23,21 @@ static char esc_char[256];
 
 static void
 init_token_predict() {
-    memset(token_predict, TT_CHAR, sizeof(token_predict));
+    memset(token_predict, TT_ERR, sizeof(token_predict));
+
+    /* Seperator */
+    {
+        int i, e;
+        const char* sep = "{}[],";
+        for (i = 0, e = (int)strlen(sep); i < e; i++) {
+            uint8_t c = (uint8_t)sep[i];
+            token_predict[c] = TT_CHAR;
+        }
+    }
 
     /* Null predictor */
     token_predict['n'] = TT_NULL;
+    token_predict['N'] = TT_NULL;
 
     /* Number(int/fp) predictor. NOTE: unlike C, numbers
      * like +1.2 .5, -.4 are illegal.
@@ -109,14 +122,18 @@ static token_t*
 null_handler(scaner_t* scaner, const char* str, const char* str_e) {
     token_t* tk = &scaner->token;
 
-    if (str + 4 < str_e && !strcmp(str, "null")) {
+    if (str + 4 < str_e && !strncmp(str, "null", 4)) {
         update_ptr_on_succ(scaner, str, 4);
         tk->type = TT_NULL;
         return tk;
     }
 
-    update_ptr_on_failure(scaner, str, 4);
-    scaner->err_msg = "unrecognized token. null?";
+    update_ptr_on_failure(scaner, str, 0);
+    if (str + 4 < str_e && !strncasecmp(str, "null", 4)) {
+        set_scan_err(scaner, str, "'null' must be in lower case");
+    } else {
+        set_scan_err(scaner, str, 0);
+    }
     return tk;
 }
 
@@ -201,17 +218,41 @@ static token_t*
 bool_handler(scaner_t* scaner, const char* str, const char* str_e) {
     int len = str_e - str;
     token_t* tk = &scaner->token;
-    if (len >= 4 && !strncasecmp(str, "true", 4)) {
-        update_ptr_on_succ(scaner, str, 4);
-        return tk;
+    tk->type = TT_BOOL;
+    if (len >= 5) {
+        if (!strncmp(str, "true", 4)) {
+            tk->int_val = 1;
+            update_ptr_on_succ(scaner, str, 4);
+            return tk;
+        }
+
+        if (!strncmp(str, "false", 5)) {
+            tk->int_val = 0;
+            update_ptr_on_succ(scaner, str, 5);
+            return tk;
+        }
     }
 
-    if (len >= 5 && !strncasecmp(str, "false", 5)) {
-        update_ptr_on_succ(scaner, str, 5);
-        return tk;
+    update_ptr_on_failure(scaner, str, 0);
+
+    /* Emit eror-message if true/false is not in lower case, or the token
+     * starts with [tTfF], but is not boolean value at all.
+     */
+    if ((len >= 4 && strncasecmp(str, "true", 4)) ||
+        (len >= 5 && strncasecmp(str, "false", 5))) {
+        set_scan_err(scaner, str, "boolean value must be in lower case");
+    } else {
+        set_scan_err(scaner, str, 0);
     }
 
-    set_scan_err(scaner, str, NULL);
+    return tk;
+}
+
+static token_t*
+unknown_tk_handler(scaner_t* scaner, const char* str, const char* str_e) {
+    token_t* tk = &scaner->token;
+    update_ptr_on_failure(scaner, str, 0);
+    set_scan_err(scaner, str, 0);
     return tk;
 }
 
@@ -316,6 +357,7 @@ tk_hd_func token_handler[] = {
     [TT_BOOL] = bool_handler,
     [TT_NULL] = null_handler,
     [TT_CHAR] = char_handler,
+    [TT_ERR] = unknown_tk_handler
 };
 
 token_t*
@@ -340,8 +382,8 @@ sc_get_token(scaner_t* scaner) {
         int32_t col = scaner->col_num;
 
         do {
-            col = (lookahead == '\n') ? 0 : col + 1;
-            ln += ((lookahead == '\n') ? 0 : 1);
+            col = (lookahead == '\n') ? 1 : col + 1;
+            ln += ((lookahead == '\n') ? 1 : 0);
 
             if (unlikely(str_end <= ++str_ptr)) {
                 scaner->token.type = TT_END;
@@ -356,6 +398,7 @@ sc_get_token(scaner_t* scaner) {
 
         scaner->line_num = ln;
         scaner->col_num = col;
+        scaner->scan_ptr = str_ptr;
     }
 
     return token_handler[tt](scaner, str_ptr, str_end);
@@ -375,8 +418,8 @@ sc_create(mempool_t* mp, const char* json, uint32_t json_len) {
     scaner->json_begin = json;
     scaner->json_end = json + json_len;
     scaner->scan_ptr = json;
-    scaner->line_num = 0;
-    scaner->col_num = 0;
+    scaner->line_num = 1;
+    scaner->col_num = 1;
     scaner->err_msg = NULL;
     return scaner;
 }
@@ -415,6 +458,6 @@ set_scan_err_fmt(scaner_t* scaner, const char* loc, const char* fmt, ...) {
 
 static void __attribute__((cold))
 set_scan_err(scaner_t* scaner, const char* loc, const char* str) {
-    if (!str) { str = "unknown token"; }
+    if (!str) { str = unrecog_token; }
     set_scan_err_fmt(scaner, loc, "%s", str);
 }
