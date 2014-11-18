@@ -1,0 +1,6 @@
+*.o
+*.d
+*.so
+callgrind.*
+.gdb_history
+tags

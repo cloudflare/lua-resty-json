@@ -25,7 +25,6 @@ alloc_composite_state(pstack_t *s) {
         slist_elmt_t* e = slist_delete_first(free_comp_state);
         return (list_elmt_t*)(void*)e;
     }
-
     uint32_t elmt_sz = list_elmt_size(sizeof(composite_state_t));
     list_elmt_t* e = (list_elmt_t*)mp_alloc(s->mempool, elmt_sz);
     return e;
@@ -64,21 +63,10 @@ pstack_pop(pstack_t* s) {
     slist_prepend(&s->free_comp_state, (slist_elmt_t*)(void*)top);
 }
 
+
 int
-pstack_add_subobj(pstack_t* s, composite_state_t* level, obj_t* subojb) {
-    slist_t* free_list = &s->free_sub_objs;
-
-    slist_elmt_t* subobj_elmt = slist_delete_first(free_list);
-    if (!subobj_elmt) {
-        subobj_elmt = MEMPOOL_ALLOC_TYPE(s->mempool, slist_elmt_t);
-        if (unlikely(!subobj_elmt))
-            return 0;
-    }
-
-    subobj_elmt->ptr_val = subojb;
-    slist_prepend(&level->sub_objs, subobj_elmt);
-
-    return 1;
+pstack_add_subobj(pstack_t* s, composite_state_t* level, obj_t* subobj) {
+    return insert_primitive_subobj(s->mempool, &level->sub_objs, subobj);
 }
 
 /***************************************************************************
@@ -96,16 +84,14 @@ cvt_primitive_tk(mempool_t* mp, token_t* tk) {
     if (unlikely(!obj))
         return 0;
 
-    static const char tk_ty_map[] = {
-        [TT_INT64] = OT_INT64,
-        [TT_FP] = OT_FP,
-        [TT_STR] = OT_STR,
-        [TT_BOOL] = OT_BOOL,
-        [TT_NULL] = OT_NULL
-    };
+    ASSERT((((int)TT_INT64 == (int)OT_INT64) &&
+            ((int)TT_FP == (int)OT_FP) &&
+            ((int)TT_STR == (int)OT_STR) &&
+            ((int)TT_BOOL == (int)OT_BOOL) &&
+            ((int)TT_NULL == (int)OT_NULL)));
 
-    obj->obj_ty = tk_ty_map[tk->type];
     obj->int_val = tk->int_val;
+    obj->obj_ty = tk->type;
     obj->str_len = tk->str_len;
 
     return obj;
@@ -123,35 +109,28 @@ cvt_primitive_tk(mempool_t* mp, token_t* tk) {
  * hashtab ht = {k1:v1, ... kn:vn} in json, once it is successfully parsed,
  * its representation is vn, kn, ... v1, k1.
  */
-static inline int
-insert_primitive_subobj(parser_t* parser, obj_t* subobj) {
-    pstack_t* s = parser->parse_stack;
-    composite_state_t* top = pstack_top(s);
-    if (unlikely(!pstack_add_subobj(s, top, subobj)))
-        return 0;
-    return 1;
-}
-
 int
-insert_subobj(parser_t* parser, obj_t* subobj) {
-    if (!insert_primitive_subobj(parser, subobj))
+insert_subobj(parser_t* parser, composite_obj_t* subobj) {
+    pstack_t* s = &parser->parse_stack;
+    composite_state_t* top = pstack_top(s);
+
+    if (!insert_primitive_subobj(parser->mempool, &top->sub_objs, &subobj->obj))
         return 0;
 
-    if (subobj->obj_ty <= OT_LAST_PRIMITIVE)
+    if (subobj->obj.obj_ty <= OT_LAST_PRIMITIVE)
         return 1;
 
     /* Link the composite object in a reverse nesting order */
-    composite_obj_t* cobj = (composite_obj_t*)(void*)subobj;
     composite_obj_t* last = parser->last_emitted_cobj;
-    cobj->next = 0;
+    subobj->next = 0;
 
     if (last) {
-        last->next = cobj;
+        last->next = subobj;
     } else {
-        parser->result = subobj;
+        parser->result = &subobj->obj;
     }
 
-    parser->last_emitted_cobj = cobj;
+    parser->last_emitted_cobj = subobj;
     return 1;
 }
 
@@ -160,10 +139,10 @@ insert_subobj(parser_t* parser, obj_t* subobj) {
  *   - Add the object to its immediately enclosing composite object.
  */
 int
-emit_primitive_tk(parser_t* parser, token_t* tk) {
-    obj_t* obj = cvt_primitive_tk(parser->mempool, tk);
+emit_primitive_tk(mempool_t* mp, token_t* tk, slist_t* sub_obj_list) {
+    obj_t* obj = cvt_primitive_tk(mp, tk);
     if (obj) {
-        return insert_primitive_subobj(parser, obj);
+        return insert_primitive_subobj(mp, sub_obj_list, obj);
     }
 
     return 0;
@@ -175,16 +154,14 @@ emit_primitive_tk(parser_t* parser, token_t* tk) {
  *
  ***************************************************************************
  */
-
 obj_t*
 parse(parser_t* parser, const char* json,  uint32_t json_len) {
-    pstack_t* pstack =  parser->parse_stack;
     ASSERT(pstack_empty(pstack));
 
-    scaner_t* scanner = parser->scaner;
-    pstack_push(pstack, OT_ROOT, 0 /* don't care */);
+    scaner_t* scaner = &parser->scaner;
+    pstack_push(&parser->parse_stack, OT_ROOT, 0 /* don't care */);
 
-    token_t* tk = sc_get_token(scanner);
+    token_t* tk = sc_get_token(scaner);
     token_ty_t tk_ty = tk->type;
 
     /* case 1: The input json starts with delimiter of composite objects
@@ -203,7 +180,7 @@ parse(parser_t* parser, const char* json,  uint32_t json_len) {
         }
 
         while (succ) {
-            composite_state_t* top = pstack_top(pstack);
+            composite_state_t* top = pstack_top(&parser->parse_stack);
             if (top->obj_ty == OT_HASHTAB) {
                 succ = parse_hashtab(parser);
             } else if (top->obj_ty == OT_ARRAY) {
@@ -217,7 +194,7 @@ parse(parser_t* parser, const char* json,  uint32_t json_len) {
         if (unlikely(!succ))
             return 0;
 
-        token_t* end_tk = sc_get_token(scanner);
+        token_t* end_tk = sc_get_token(scaner);
         if (end_tk->type != TT_END) {
             goto trailing_junk;
         }
@@ -236,7 +213,7 @@ parse(parser_t* parser, const char* json,  uint32_t json_len) {
      */
     if (tk_is_primitive(tk)) {
         parser->result = cvt_primitive_tk(parser->mempool, tk);
-        if (sc_get_token(scanner)->type == TT_END) {
+        if (sc_get_token(scaner)->type == TT_END) {
             return parser->result;
         }
     }
@@ -245,6 +222,20 @@ trailing_junk:
     parser->result = 0;
     set_parser_err(parser, "Extraneous stuff");
     return 0;
+}
+
+static void
+reset_parser(parser_t* parser, const char* json, uint32_t json_len) {
+    mempool_t* mp = parser->mempool;
+    mp_free_all(mp);
+
+    pstack_init(&parser->parse_stack, mp);
+    sc_init_scaner(&parser->scaner, mp, json, json_len);
+    parser->result = 0;
+    parser->last_emitted_cobj = 0;
+
+    parser->err_msg = 0;
+    parser->next_cobj_id = 1;
 }
 
 /****************************************************************************
@@ -263,36 +254,18 @@ jp_create(void) {
     if (unlikely(!mp))
         return 0;
 
-    p->parse_stack = 0;
-    p->scaner = 0;
-    p->err_msg = "Out of Memory"; /* default error message :-)*/
     p->mempool = mp;
+    p->result = 0;
+    p->err_msg = "Out of Memory"; /* default error message :-)*/
+
+    pstack_init(&p->parse_stack, mp);
     return (struct json_parser*)(void*)p;
 }
 
 obj_t*
 jp_parse(struct json_parser* jp, const char* json, uint32_t len) {
     parser_t* parser = (parser_t*)(void*)jp;
-
-    parser->result = 0;
-    parser->last_emitted_cobj = 0;
-
-    mempool_t* mp = parser->mempool;
-
-    mp_free_all(mp);
-
-    scaner_t* s = sc_create(mp, json, len);
-    if (unlikely(!s))
-        return 0;
-    parser->scaner = s;
-
-    pstack_t* ps = pstack_create(mp);
-    if (unlikely(!ps))
-        return 0;
-    parser->parse_stack = ps;
-
-    parser->err_msg = 0;
-    parser->next_cobj_id = 1;
+    reset_parser(parser, json, len);
 
     obj_t* obj = parse(parser, json,  len);
     return obj;
@@ -324,22 +297,20 @@ set_parser_err_fmt(parser_t* parser, const char* fmt, ...) {
     }
     parser->err_msg = buf;
 
-    scaner_t* scaner = parser->scaner;
-    if (scaner) {
-        /* In case error take place in scaner, we should go for scaner's
-         * error message.
-         */
+    scaner_t* scaner = &parser->scaner;
+    /* In case error take place in scaner, we should go for scaner's
+     * error message.
+     */
 
-        if (scaner->err_msg) {
-            snprintf(buf, buf_len, "%s", scaner->err_msg);
-            return;
-        }
-
-        int loc_info_len = snprintf(buf, buf_len, "(line:%d,col:%d) ",
-                                    scaner->line_num, scaner->col_num);
-        buf += loc_info_len;
-        buf_len -= loc_info_len;
+    if (scaner->err_msg) {
+        snprintf(buf, buf_len, "%s", scaner->err_msg);
+        return;
     }
+
+    int loc_info_len = snprintf(buf, buf_len, "(line:%d,col:%d) ",
+                                    scaner->line_num, scaner->col_num);
+    buf += loc_info_len;
+    buf_len -= loc_info_len;
 
     va_list vl;
     va_start(vl, fmt);

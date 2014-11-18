@@ -404,16 +404,9 @@ sc_get_token(scaner_t* scaner) {
     return token_handler[tt](scaner, str_ptr, str_end);
 }
 
-scaner_t*
-sc_create(mempool_t* mp, const char* json, uint32_t json_len) {
-#if 0
-    ASSERT(verify_esc_keyval_sorted() &&
-           "esc_keyvals is not sorted in ascending order");
-#endif
-    scaner_t* scaner = MEMPOOL_ALLOC_TYPE(mp, scaner_t);
-    if (unlikely(!scaner))
-        return 0;
-
+void
+sc_init_scaner(scaner_t* scaner, mempool_t* mp,
+               const char* json, uint32_t json_len) {
     scaner->mempool = mp;
     scaner->json_begin = json;
     scaner->json_end = json + json_len;
@@ -421,7 +414,6 @@ sc_create(mempool_t* mp, const char* json, uint32_t json_len) {
     scaner->line_num = 1;
     scaner->col_num = 1;
     scaner->err_msg = NULL;
-    return scaner;
 }
 
 /****************************************************************

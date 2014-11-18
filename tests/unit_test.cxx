@@ -283,7 +283,7 @@ test_diagnoistic() {
 int
 main(int argc, char** argv) {
     test_diagnoistic();
-    //test_token();
+    test_token();
 
     fprintf(stdout, "\n%s\n Test number: %d, Failure Number %d\n",
         "===============================================================",

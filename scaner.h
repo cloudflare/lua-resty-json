@@ -2,20 +2,21 @@
 #define SCANER_H
 
 #include <stdint.h>
+#include "ljson_parser.h"
 #include "mempool.h"
 
 typedef enum {
     /* Integer that can fit in int64_t. Otherwise, it would be represented with
      * double-precision floating-point number.
      */
-    TT_INT64,
+    TT_INT64 = OT_INT64,
 
     /* double-precision number */
-    TT_FP,
+    TT_FP = OT_FP,
 
-    TT_STR,
-    TT_BOOL,
-    TT_NULL,
+    TT_STR = OT_STR,
+    TT_BOOL = OT_BOOL,
+    TT_NULL = OT_NULL,
     TT_LAST_PRIMITIVE = TT_NULL,
 
     /* If scanner fail to recognaize a primtive at current position, it just
@@ -77,9 +78,8 @@ tk_is_primitive(const token_t* tk) {
     return ((uint32_t)tk->type) <= TT_LAST_PRIMITIVE;
 }
 
-scaner_t* sc_create(mempool_t* mp, const char* json, uint32_t json_len);
+void sc_init_scaner(scaner_t*, mempool_t*, const char* json, uint32_t json_len);
 
 token_t* sc_get_token(scaner_t*);
-
 
 #endif

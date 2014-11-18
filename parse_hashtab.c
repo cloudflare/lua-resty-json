@@ -2,7 +2,7 @@
 
 static int
 emit_hashtab(parser_t* parser) {
-    pstack_t* ps = parser->parse_stack;
+    pstack_t* ps = &parser->parse_stack;
     composite_state_t* top = pstack_top(ps);
 
     int elmt_num = top->sub_objs.size;
@@ -31,7 +31,7 @@ emit_hashtab(parser_t* parser) {
     pstack_pop(ps);
 
     /* Add this hashtab to the enclosing composite object */
-    insert_subobj(parser, (obj_t*)(void*)ht);
+    insert_subobj(parser, ht);
 
     return 1;
 }
@@ -46,10 +46,13 @@ typedef enum {
 int
 parse_keyval_pair(parser_t* parser, scaner_t* scaner) {
     token_t* tk = sc_get_token(scaner);
+    pstack_t* ps = &parser->parse_stack;
+    composite_state_t* top = pstack_top(ps);
+    slist_t* subobj_list = &top->sub_objs;
 
     /* step 1: Parse the key string */
     if (tk->type == TT_STR) {
-        if (unlikely(!emit_primitive_tk(parser, tk))) {
+        if (unlikely(!emit_primitive_tk(parser->mempool, tk, subobj_list))) {
             return PKVP_ERR;
         }
     } else if (tk->type == TT_CHAR && tk->char_val == '}') {
@@ -66,7 +69,7 @@ parse_keyval_pair(parser_t* parser, scaner_t* scaner) {
     /* step 3: parse the 'value' part */
     tk = sc_get_token(scaner);
     if (tk_is_primitive(tk)) {
-        if (unlikely(!emit_primitive_tk(parser, tk)))
+        if (unlikely(!emit_primitive_tk(parser->mempool, tk, subobj_list)))
             return PKVP_ERR;
         return PKVP_DONE;
     }
@@ -96,8 +99,8 @@ typedef enum {
 
 int
 parse_hashtab(parser_t* parser) {
-    scaner_t* scaner = parser->scaner;
-    pstack_t* ps = parser->parse_stack;
+    scaner_t* scaner = &parser->scaner;
+    pstack_t* ps = &parser->parse_stack;
     composite_state_t* state = pstack_top(ps);
     PHT_STATE parse_state = state->parse_state;
 
@@ -168,7 +171,7 @@ err_out:
 
 int
 start_parsing_hashtab(parser_t* parser) {
-    if (!pstack_push(parser->parse_stack, OT_HASHTAB, PHT_JUST_BEGUN))
+    if (!pstack_push(&parser->parse_stack, OT_HASHTAB, PHT_JUST_BEGUN))
         return 0;
 
     return parse_hashtab(parser);

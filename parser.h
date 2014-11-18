@@ -38,8 +38,8 @@ typedef struct {
 } composite_state_t;
 
 typedef struct {
-    pstack_t* parse_stack;
-    scaner_t* scaner;
+    pstack_t parse_stack;
+    scaner_t scaner;
     const char* err_msg;
     mempool_t* mempool;
     /* link the composite objects in a reverse nesting order. e.g
@@ -63,16 +63,13 @@ typedef struct {
  *
  ****************************************************************************
  */
-static inline pstack_t*
-pstack_create(mempool_t* mp) {
-    pstack_t* ps = MEMPOOL_ALLOC_TYPE(mp, pstack_t);
+static inline void
+pstack_init(pstack_t* ps, mempool_t* mp) {
     list_init(&ps->stack);
     ps->mempool = mp;
 
     slist_init(&ps->free_comp_state);
     slist_init(&ps->free_sub_objs);
-
-    return ps;
 }
 
 static inline composite_state_t*
@@ -96,8 +93,20 @@ static inline int pstack_empty(pstack_t* s) { return list_empty(&s->stack); }
  *
  ****************************************************************************
  */
-int emit_primitive_tk(parser_t* parser, token_t* tk);
-int insert_subobj(parser_t* parser, obj_t* subobj);
+int emit_primitive_tk(mempool_t* mp, token_t* tk, slist_t* sub_obj_list);
+
+static inline int
+insert_primitive_subobj(mempool_t* mp, slist_t* subobj_list, obj_t* subobj) {
+    slist_elmt_t* subobj_elmt = MEMPOOL_ALLOC_TYPE(mp, slist_elmt_t);
+    if (unlikely(!subobj_elmt))
+        return 0;
+
+    subobj_elmt->ptr_val = subobj;
+    slist_prepend(subobj_list, subobj_elmt);
+    return 1;
+}
+
+int insert_subobj(parser_t* parser, composite_obj_t* subobj);
 
 void __attribute__((format(printf, 2, 3), cold))
     set_parser_err_fmt(parser_t* parser, const char* fmt, ...);

@@ -4,7 +4,7 @@
 static const char* syntax_err = "Array syntax error, expect ',' or ']'";
 static int
 emit_array(parser_t* parser) {
-    composite_state_t* top = pstack_top(parser->parse_stack);
+    composite_state_t* top = pstack_top(&parser->parse_stack);
     ASSERT(top->obj_ty == OT_ARRAY);
 
     composite_obj_t* array_obj =
@@ -33,10 +33,9 @@ emit_array(parser_t* parser) {
     array_obj->obj.elmt_vect = elmt_vect;
     array_obj->id = parser->next_cobj_id++;
 
-    pstack_pop(parser->parse_stack);
-    return insert_subobj(parser, (obj_t*)(void*)array_obj);
+    pstack_pop(&parser->parse_stack);
+    return insert_subobj(parser, array_obj);
 }
-
 
 /* state returned from parse_array_elmt */
 typedef enum {
@@ -52,16 +51,11 @@ typedef enum {
     PAE_ERR
 } PAE_STATE;
 
-PAE_STATE
-parse_array_elmt(parser_t* parser, scaner_t* scaner, token_t* tk) {
-    if (unlikely(!tk)) {
-        parser->err_msg = scaner->err_msg;
-        return PAE_ERR;
-    }
-
+static PAE_STATE
+parse_array_elmt(parser_t* parser, token_t* tk, slist_t* sub_obj_list) {
     /* case 1: The token contains an primitive object */
     if (tk_is_primitive(tk)) {
-        if (emit_primitive_tk(parser, tk))
+        if (emit_primitive_tk(parser->mempool, tk, sub_obj_list))
             return PAE_DONE;
         return PAE_ERR;
     }
@@ -109,8 +103,10 @@ typedef enum {
  */
 int
 parse_array(parser_t* parser) {
-    scaner_t* scaner = parser->scaner;
-    composite_state_t* state = pstack_top(parser->parse_stack);
+    scaner_t* scaner = &parser->scaner;
+    composite_state_t* state = pstack_top(&parser->parse_stack);
+    slist_t* sub_obj_list = &state->sub_objs;
+
     PA_STATE parse_state = state->parse_state;
 
     while (1) {
@@ -122,12 +118,12 @@ parse_array(parser_t* parser) {
          *      o. closing delimiter of an array, i.e. the ']'.
          */
         if (parse_state == PA_PARSING_MORE_ELMT) {
-            token_t* tk = sc_get_token(scaner);
-            if (tk->type == TT_CHAR) {
-                char c = tk->char_val;
+            token_t* delimiter = sc_get_token(scaner);
+            if (delimiter->type == TT_CHAR) {
+                char c = delimiter->char_val;
                 if (c == ',') {
-                    tk = sc_get_token(scaner);
-                    PAE_STATE ret = parse_array_elmt(parser, scaner, tk);
+                    token_t* tk = sc_get_token(scaner);
+                    PAE_STATE ret = parse_array_elmt(parser, tk, sub_obj_list);
                     if (ret == PAE_DONE)
                         continue;
                     else if (ret == PAE_COMPOSITE) {
@@ -143,14 +139,13 @@ parse_array(parser_t* parser) {
                     return emit_array(parser);
                 }
             }
-
             goto err_out;
         }
 
         /* case 2: Just saw '[', and try to parse the first element. */
         if (parse_state == PA_JUST_BEGUN) {
             token_t* tk = sc_get_token(scaner);
-            PAE_STATE ret = parse_array_elmt(parser, scaner, tk);
+            PAE_STATE ret = parse_array_elmt(parser, tk, sub_obj_list);
             switch (ret) {
             case PAE_DONE:
                 parse_state = PA_PARSING_MORE_ELMT;
@@ -184,7 +179,7 @@ err_out:
 
 int
 start_parsing_array(parser_t* parser) {
-    if (!pstack_push(parser->parse_stack, OT_ARRAY, PA_JUST_BEGUN))
+    if (!pstack_push(&parser->parse_stack, OT_ARRAY, PA_JUST_BEGUN))
         return 0;
 
     return parse_array(parser);

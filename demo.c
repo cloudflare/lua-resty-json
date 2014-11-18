@@ -54,9 +54,9 @@ main (int argc, char** argv) {
         return 1;
     }
 
-#if 0
-    int i = 0; 
-    for (; i < 1000; i++) {
+#if 1
+    int i = 0;
+    for (; i < 10000; i++) {
      (void)jp_parse(jp, json, len);
     }
 #else
