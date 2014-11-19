@@ -61,6 +61,7 @@ add_a_chunk(mempool_t* mp, int size) {
         mp->chunk_hdr.next = new_chunk;
     }
 
+    mp->last->next = new_chunk;
     mp->last = new_chunk;
     ASSERT(new_chunk->chunk_end - new_chunk->free >= size);
 
@@ -97,6 +98,8 @@ mp_destroy(mempool_t* mp) {
         free((void*)iter);
         iter = next;
     };
+
+    free((void*)mp);
 }
 
 void
