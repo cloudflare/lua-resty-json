@@ -28,7 +28,7 @@ init_token_predict() {
     /* Seperator */
     {
         int i, e;
-        const char* sep = "{}[],";
+        const char* sep = "{}[],:";
         for (i = 0, e = (int)strlen(sep); i < e; i++) {
             uint8_t c = (uint8_t)sep[i];
             token_predict[c] = TT_CHAR;
