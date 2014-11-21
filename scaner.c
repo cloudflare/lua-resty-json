@@ -266,9 +266,9 @@ process_unicode_esc(char* c1, char* c2, const char* src) {
 static token_t*
 str_handler(scaner_t* scaner, const char* str, const char* str_e) {
     /* step 1: determine the end of string */
-    char* str_quote = 0;
+    const char* str_quote = str;
     do {
-        str_quote = memchr(str + 1, '"', str_e - str);
+        str_quote = memchr(str_quote + 1, '"', str_e - str_quote);
     } while(str_quote && *(str_quote - 1) == '\\');
 
     token_t* tk = &scaner->token;

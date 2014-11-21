@@ -1,0 +1,14 @@
+input: [Null]
+output: (line:1,col:9) 'null' must be in lower case
+
+input: [NUll]
+output: (line:1,col:9) 'null' must be in lower case
+
+input: [nUll]
+output: (line:1,col:9) 'null' must be in lower case
+
+input: [ lol]
+output: (line:1,col:10) Unrecognizable token
+
+input: [True]
+output: (line:1,col:9) boolean value must be in lower case

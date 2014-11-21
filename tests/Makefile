@@ -1,4 +1,4 @@
-SRC := unit_test.cxx
+SRC := unit_test.cxx test_util.cxx
 OBJ := ${SRC:.cxx=.o}
 
 CXXFLAGS := -Wall -O0 -g -MMD

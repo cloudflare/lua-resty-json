@@ -1,0 +1,32 @@
+###########################################################
+#
+#  This file include testing cases for scaner. The purose
+# is to see if scaner get the token correctly.
+#
+###########################################################
+#
+
+#!!!!!!!!!!! test boolean token !!!!!!!!!!!!!!!!!!
+input: [   true    ]
+output: [true]
+
+input: [false ]
+output: [false]
+
+# !!!!!!!!!!! test null token !!!!!!!!!!!!!!!
+input: [null]
+output: [null]
+
+input: [ null]
+output: [null]
+
+input: [ null ]
+output: [null]
+
+
+# !!!!!!!!!!! string token !!!!!!!!!!!!!!!
+input: [ "lol"]
+output: ["lol"]
+
+input: [ "l\"ol"]
+output: ["l\"ol"]
