@@ -40,7 +40,7 @@ trim_space_both_ends(string& str) {
 void
 test_driver(const char* test_spec_file, const char* message,
             bool expect_fail = false) {
-    fprintf(stdout, "\n\n%s (test-spec:%s)\n"
+    fprintf(stdout, "\n\n%s \n  (test-spec:%s)\n"
                     "========================================\n",
             message, test_spec_file);
 
@@ -100,8 +100,8 @@ test_driver(const char* test_spec_file, const char* message,
 
 int
 main(int argc, char** argv) {
-    test_driver("test_token.txt", "Scaner testing cases");
-    test_driver("test_diagnostic.txt", "Test diagnoistic information", true);
+    test_driver("test_spec/test_token.txt", "Scaner testing cases");
+    test_driver("test_spec/test_diagnostic.txt", "Test diagnoistic information", true);
     //test_driver("a.txt", "Scaner testing cases");
     return (fail_num != 0 || test_spec_wrong) ? 1 : 0;
 }

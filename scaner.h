@@ -82,4 +82,9 @@ void sc_init_scaner(scaner_t*, mempool_t*, const char* json, uint32_t json_len);
 
 token_t* sc_get_token(scaner_t*);
 
+/* Rewind the pointer back to beginning of token just successfully scaned.
+ * It's called by parser when it detects syntax error.
+ */
+void sc_rewind(scaner_t*);
+
 #endif

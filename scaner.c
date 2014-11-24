@@ -273,8 +273,8 @@ str_handler(scaner_t* scaner, const char* str, const char* str_e) {
 
     token_t* tk = &scaner->token;
     if (unlikely(!str_quote)) {
-        /* The string dose not have enclosing double-quote */
-        tk->type = TT_ERR;
+        /* The string dose not end with quote*/
+        set_scan_err(scaner, str, "String does not end with quote");
         return tk;
     }
 
@@ -414,6 +414,13 @@ sc_init_scaner(scaner_t* scaner, mempool_t* mp,
     scaner->line_num = 1;
     scaner->col_num = 1;
     scaner->err_msg = NULL;
+}
+
+void
+sc_rewind (scaner_t* scaner) {
+    int span = scaner->token.span;
+    scaner->scan_ptr -= span;
+    scaner->col_num -= span;
 }
 
 /****************************************************************

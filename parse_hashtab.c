@@ -57,6 +57,13 @@ parse_keyval_pair(parser_t* parser, scaner_t* scaner) {
         }
     } else if (tk->type == TT_CHAR && tk->char_val == '}') {
         return PKVP_CLOSE;
+    } else {
+        if (tk->type != TT_ERR) {
+            sc_rewind(scaner);
+            set_parser_err(parser, "Key must be a string");
+        }
+
+        return PKVP_ERR;
     }
 
     /* step 2: Expect ':' delimiter */

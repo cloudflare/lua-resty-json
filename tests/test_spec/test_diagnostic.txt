@@ -12,3 +12,6 @@ output: (line:1,col:10) Unrecognizable token
 
 input: [True]
 output: (line:1,col:9) boolean value must be in lower case
+
+input: { 123:456}
+output: (line:1,col:10) Key must be a string
