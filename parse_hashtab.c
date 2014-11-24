@@ -45,7 +45,8 @@ typedef enum {
 
 int
 parse_keyval_pair(parser_t* parser, scaner_t* scaner) {
-    token_t* tk = sc_get_token(scaner);
+    const char* json_end = scaner->json_end;
+    token_t* tk = sc_get_token(scaner, json_end);
     pstack_t* ps = &parser->parse_stack;
     composite_state_t* top = pstack_top(ps);
     slist_t* subobj_list = &top->sub_objs;
@@ -67,14 +68,14 @@ parse_keyval_pair(parser_t* parser, scaner_t* scaner) {
     }
 
     /* step 2: Expect ':' delimiter */
-    tk = sc_get_token(scaner);
+    tk = sc_get_token(scaner, json_end);
     if (tk->type != TT_CHAR || tk->char_val != ':') {
         set_parser_err(parser, "expect ':'");
         return PKVP_ERR;
     }
 
     /* step 3: parse the 'value' part */
-    tk = sc_get_token(scaner);
+    tk = sc_get_token(scaner, json_end);
     if (tk_is_primitive(tk)) {
         if (unlikely(!emit_primitive_tk(parser->mempool, tk, subobj_list)))
             return PKVP_ERR;
@@ -107,6 +108,7 @@ typedef enum {
 int
 parse_hashtab(parser_t* parser) {
     scaner_t* scaner = &parser->scaner;
+    const char* json_end = scaner->json_end;
     pstack_t* ps = &parser->parse_stack;
     composite_state_t* state = pstack_top(ps);
     PHT_STATE parse_state = state->parse_state;
@@ -120,7 +122,7 @@ parse_hashtab(parser_t* parser) {
          *     o. the closing delimiter of a hashtab, i.e. the '}'.
          */
         if (parse_state == PHT_PARSING_MORE_ELMT) {
-            token_t* tk = sc_get_token(scaner);
+            token_t* tk = sc_get_token(scaner, json_end);
             if (unlikely(!tk)) {
                 parser->err_msg = scaner->err_msg;
                 return 0;

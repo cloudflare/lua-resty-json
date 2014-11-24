@@ -349,6 +349,8 @@ str_handler(scaner_t* scaner, const char* str, const char* str_e) {
     return NULL;
 }
 
+static token_t* space_handler(scaner_t*, const char*, const char*);
+
 typedef token_t* (*tk_hd_func)(scaner_t*, const char*, const char*);
 tk_hd_func token_handler[] = {
     [TT_INT64] = 0,
@@ -357,13 +359,44 @@ tk_hd_func token_handler[] = {
     [TT_BOOL] = bool_handler,
     [TT_NULL] = null_handler,
     [TT_CHAR] = char_handler,
-    [TT_ERR] = unknown_tk_handler
+    [TT_ERR] = unknown_tk_handler,
+    [TT_IS_SPACE] = space_handler,
 };
 
+static token_t*
+space_handler(scaner_t* scaner, const char* str_ptr, const char* str_end) {
+    int32_t ln = 0;
+    int32_t col = 0;
+
+    char lookahead = *str_ptr;
+    token_ty_t tt;
+    do {
+        col = (lookahead == '\n') ? 1 : col + 1;
+        ln += ((lookahead == '\n') ? 1 : 0);
+
+        if (unlikely(str_end <= ++str_ptr)) {
+            scaner->token.type = TT_END;
+            return &scaner->token;
+        }
+
+        lookahead = *str_ptr;
+        tt = (token_ty_t)token_predict[(uint32_t)lookahead];
+        if (tt != TT_IS_SPACE)
+            break;
+    } while (1);
+
+    scaner->line_num += ln;
+    scaner->col_num += col;
+    /* It is not necessary to set scan_ptr as token-handler will update it.*/
+    /*scaner->scan_ptr = str_ptr; */
+
+    return token_handler[tt](scaner, str_ptr, str_end);
+}
+
 token_t*
-sc_get_token(scaner_t* scaner) {
+sc_get_token(scaner_t* scaner, const char* str_end) {
     const char* str_ptr = scaner->scan_ptr;
-    const char* str_end = scaner->json_end;
+    ASSERT(str_end == scaner->json_end);
 
     if (unlikely(str_ptr >= str_end)) {
         scaner->token.type = TT_END;
@@ -371,36 +404,7 @@ sc_get_token(scaner_t* scaner) {
     }
 
     char lookahead = *str_ptr;
-
-    /* Following if-construct is just to skip whitespaces, it reads somewhat
-     * awkward as we are trying to reduce branch even at the cost of
-     * readability.
-     */
     token_ty_t tt = (token_ty_t)token_predict[(uint32_t)lookahead];
-    if (tt == TT_IS_SPACE) {
-        int32_t ln = scaner->line_num;
-        int32_t col = scaner->col_num;
-
-        do {
-            col = (lookahead == '\n') ? 1 : col + 1;
-            ln += ((lookahead == '\n') ? 1 : 0);
-
-            if (unlikely(str_end <= ++str_ptr)) {
-                scaner->token.type = TT_END;
-                return &scaner->token;
-            }
-
-            lookahead = *str_ptr;
-            tt = (token_ty_t)token_predict[(uint32_t)lookahead];
-            if (tt != TT_IS_SPACE)
-                break;
-        } while (1);
-
-        scaner->line_num = ln;
-        scaner->col_num = col;
-        scaner->scan_ptr = str_ptr;
-    }
-
     return token_handler[tt](scaner, str_ptr, str_end);
 }
 

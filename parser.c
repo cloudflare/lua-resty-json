@@ -159,9 +159,10 @@ parse(parser_t* parser, const char* json,  uint32_t json_len) {
     ASSERT(pstack_empty(pstack));
 
     scaner_t* scaner = &parser->scaner;
+    const char* json_end = scaner->json_end;
     pstack_push(&parser->parse_stack, OT_ROOT, 0 /* don't care */);
 
-    token_t* tk = sc_get_token(scaner);
+    token_t* tk = sc_get_token(scaner, json_end);
     token_ty_t tk_ty = tk->type;
 
     /* case 1: The input json starts with delimiter of composite objects
@@ -194,7 +195,7 @@ parse(parser_t* parser, const char* json,  uint32_t json_len) {
         if (unlikely(!succ))
             return 0;
 
-        token_t* end_tk = sc_get_token(scaner);
+        token_t* end_tk = sc_get_token(scaner, json_end);
         if (end_tk->type != TT_END) {
             goto trailing_junk;
         }
@@ -213,7 +214,7 @@ parse(parser_t* parser, const char* json,  uint32_t json_len) {
      */
     if (tk_is_primitive(tk)) {
         parser->result = cvt_primitive_tk(parser->mempool, tk);
-        if (sc_get_token(scaner)->type == TT_END) {
+        if (sc_get_token(scaner, json_end)->type == TT_END) {
             return parser->result;
         }
     }

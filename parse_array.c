@@ -104,6 +104,7 @@ typedef enum {
 int
 parse_array(parser_t* parser) {
     scaner_t* scaner = &parser->scaner;
+    const char* json_end = scaner->json_end;
     composite_state_t* state = pstack_top(&parser->parse_stack);
     slist_t* sub_obj_list = &state->sub_objs;
 
@@ -118,11 +119,11 @@ parse_array(parser_t* parser) {
          *      o. closing delimiter of an array, i.e. the ']'.
          */
         if (parse_state == PA_PARSING_MORE_ELMT) {
-            token_t* delimiter = sc_get_token(scaner);
+            token_t* delimiter = sc_get_token(scaner, json_end);
             if (delimiter->type == TT_CHAR) {
                 char c = delimiter->char_val;
                 if (c == ',') {
-                    token_t* tk = sc_get_token(scaner);
+                    token_t* tk = sc_get_token(scaner, json_end);
                     PAE_STATE ret = parse_array_elmt(parser, tk, sub_obj_list);
                     if (ret == PAE_DONE)
                         continue;
@@ -144,7 +145,7 @@ parse_array(parser_t* parser) {
 
         /* case 2: Just saw '[', and try to parse the first element. */
         if (parse_state == PA_JUST_BEGUN) {
-            token_t* tk = sc_get_token(scaner);
+            token_t* tk = sc_get_token(scaner, json_end);
             PAE_STATE ret = parse_array_elmt(parser, tk, sub_obj_list);
             switch (ret) {
             case PAE_DONE:

@@ -80,7 +80,7 @@ tk_is_primitive(const token_t* tk) {
 
 void sc_init_scaner(scaner_t*, mempool_t*, const char* json, uint32_t json_len);
 
-token_t* sc_get_token(scaner_t*);
+token_t* sc_get_token(scaner_t*, const char* str_end);
 
 /* Rewind the pointer back to beginning of token just successfully scaned.
  * It's called by parser when it detects syntax error.
