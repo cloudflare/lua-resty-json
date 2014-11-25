@@ -140,8 +140,15 @@ local create_array
 local create_hashtab
 local convert_obj
 
+local cvt = { function(obj) return tonumber(obj.int_val) end,
+              function(obj) return tonumber(obj.db_val) end,
+              function(obj) return ffi_string(obj.str_val, obj.common.str_len) end,
+              function(obj) return obj.int_val == 0 and false or true end,
+              function(obj) return nil end }
+
 create_primitive = function(obj)
     local ty = obj.common.obj_ty
+    --return cvt[ty + 1](obj)
     if ty == ty_int64 then
         return tonumber(obj.int_val)
     elseif ty == ty_str then
@@ -174,7 +181,7 @@ create_array = function(array, cobj_array)
             local err;
             elmt_obj, err = create_primitive(ffi_cast(pobj_ptr_t, elmt))
             if err then
-                return nil
+                return nil, err
             end
         else
             local cobj = ffi_cast(cobj_ptr_t, elmt);
@@ -194,21 +201,31 @@ create_hashtab = function(hashtab, cobj_array)
     local elmt_num = hashtab.common.elmt_num
     local elmt_list = hashtab.subobjs
 
-    local result = tab_new(elmt_num, elmt_num / 2)
+    local result = tab_new(0, elmt_num / 2)
     for iter = 1, elmt_num, 2 do
         local val = elmt_list
         elmt_list = elmt_list.next
 
         local key = ffi_cast(pobj_ptr_t, elmt_list)
-
         local key_obj = ffi_string(key.str_val, key.common.str_len)
-        local val_obj = convert_obj(val, cobj_array)
+
+        local val_obj = nil
+        if val.obj_ty <= ty_last_primitive then
+            local err;
+            val_obj, err = create_primitive(ffi_cast(pobj_ptr_t, val))
+            if err then
+                return nil, err
+            end
+        else
+            local cobj = ffi_cast(cobj_ptr_t, val);
+            val_obj = cobj_array[cobj.id + 1]
+        end
+
         result[key_obj] = val_obj;
         elmt_list = elmt_list.next
     end
 
-    local ht = ffi_cast(cobj_ptr_t, hashtab)
-    cobj_array[ht.id + 1] = result
+    cobj_array[hashtab.id + 1] = result
 
     return result
 end
@@ -216,6 +233,7 @@ end
 convert_obj = function(obj, cobj_array)
     local ty = obj.obj_ty
     if ty <= ty_last_primitive then
+        --return nil
         return create_primitive(ffi_cast(pobj_ptr_t, obj))
     elseif ty == ty_array then
         return create_array(ffi_cast(cobj_ptr_t, obj), cobj_array)
@@ -236,7 +254,7 @@ function _M.parse(parser_inst, json)
     end
 
     local composite_objs = ffi_cast(cobj_ptr_t, objs)
-    local cobj_vect = tab_new(composite_objs.id + 1, 0)
+    local cobj_vect = tab_new(composite_objs.id + 2, 0)
 
     local last_val = nil
     repeat
