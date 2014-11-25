@@ -267,16 +267,16 @@ static token_t*
 str_handler(scaner_t* scaner, const char* str, const char* str_e) {
     /* step 1: determine the end of string */
     const char* str_quote = str;
+    token_t* tk = &scaner->token;
+
     do {
         str_quote = memchr(str_quote + 1, '"', str_e - str_quote);
-    } while(str_quote && *(str_quote - 1) == '\\');
-
-    token_t* tk = &scaner->token;
-    if (unlikely(!str_quote)) {
-        /* The string dose not end with quote*/
-        set_scan_err(scaner, str, "String does not end with quote");
-        return tk;
-    }
+        if (unlikely(!str_quote)) {
+            /* The string dose not end with quote*/
+            set_scan_err(scaner, str, "String does not end with quote");
+            return tk;
+        }
+    } while(*(str_quote - 1) == '\\');
 
     /* step 2: allocate space for the string. The new string has trailing
      * '\0' for easing purpose.

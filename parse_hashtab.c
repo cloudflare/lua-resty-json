@@ -17,7 +17,7 @@ typedef enum {
     PKVP_ERR,
 } PKVP_STATE;
 
-int
+static PKVP_STATE
 parse_keyval_pair(parser_t* parser, obj_composite_t* htab_obj) {
     scaner_t* scaner = &parser->scaner;
     const char* json_end = scaner->json_end;
@@ -74,8 +74,7 @@ parse_keyval_pair(parser_t* parser, obj_composite_t* htab_obj) {
 
 typedef enum {
     PHT_JUST_BEGUN,
-    PHT_PARSING_MORE_ELMT,
-    PHT_PARSING_1st_ELMT,
+    PHT_PARSING_ELMT,
 } PHT_STATE;
 
 int
@@ -86,61 +85,48 @@ parse_hashtab(parser_t* parser) {
     composite_state_t* state = pstack_top(parser);
     PHT_STATE parse_state = state->parse_state;
 
-    while (1) {
-        /* case 1: So far we have successfully parsed at least one element,
-         *    and now move on parsing remaining elements.
-         *
-         *   At this moment we are expecting to see:
-         *     o. "',' KEY_VAL_PAIR ... ", or
-         *     o. the closing delimiter of a hashtab, i.e. the '}'.
-         */
-        if (parse_state == PHT_PARSING_MORE_ELMT) {
-            token_t* tk = sc_get_token(scaner, json_end);
-            if (tk->type == TT_CHAR) {
-                char c = tk->char_val;
-                if (c == ',') {
-                    PKVP_STATE ret = parse_keyval_pair(parser, &state->obj);
-                    if (ret == PKVP_DONE)
-                        continue;
-                    else if (ret == PKVP_COMPOSITE) {
-                        state->parse_state = PHT_PARSING_MORE_ELMT;
-                        return 1;
-                    }
+    if (parse_state == PHT_JUST_BEGUN) {
+        state->parse_state = PHT_PARSING_ELMT;
+        PKVP_STATE ret = parse_keyval_pair(parser, &state->obj);
+        switch (ret) {
+        case PKVP_DONE:
+            parse_state = PHT_PARSING_ELMT;
+            break;
 
-                    goto err_out;
-                }
+        case PKVP_COMPOSITE:
+            return 1;
 
-                if (c == '}') {
-                    emit_hashtab(parser);
-                    return 1;
-                }
-            }
+        case PKVP_CLOSE:
+            emit_hashtab(parser);
+            return 1;
 
+        default:
             goto err_out;
         }
+    }
 
-        if (parse_state == PHT_JUST_BEGUN) {
-            state->parse_state = PHT_PARSING_1st_ELMT;
-            PKVP_STATE ret = parse_keyval_pair(parser, &state->obj);
-            switch (ret) {
-            case PKVP_DONE:
-                parse_state = PHT_PARSING_MORE_ELMT;
-                continue;
+    while (1) {
+        token_t* tk = sc_get_token(scaner, json_end);
+        if (tk->type == TT_CHAR) {
+            char c = tk->char_val;
+            if (c == ',') {
+                PKVP_STATE ret = parse_keyval_pair(parser, &state->obj);
+                if (ret == PKVP_DONE)
+                    continue;
+                else if (ret == PKVP_COMPOSITE) {
+                    return 1;
+                }
 
-            case PKVP_COMPOSITE:
-                return 1;
+                goto err_out;
+            }
 
-            case PKVP_CLOSE:
+            if (c == '}') {
                 emit_hashtab(parser);
                 return 1;
-
-            default:
-                goto err_out;
             }
         }
 
-        ASSERT(parse_state == PHT_PARSING_1st_ELMT);
-        parse_state = PHT_PARSING_MORE_ELMT;
+        goto err_out;
     }
 
 err_out:
