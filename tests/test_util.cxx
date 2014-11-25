@@ -17,11 +17,12 @@ using namespace std;
 //////////////////////////////////////////////////////////////////////
 //
 void
-JsonDumper::dump_primitive(const obj_t* obj) {
+JsonDumper::dump_primitive(const obj_t* the_obj) {
+    obj_primitive_t* obj = (obj_primitive_t*)(void*)the_obj;
     char buf[128];
     int buf_size = sizeof(buf)/sizeof(buf[0]);
 
-    obj_ty_t ot = (obj_ty_t)obj->obj_ty;
+    obj_ty_t ot = (obj_ty_t)the_obj->obj_ty;
     int dump_len = 0;
     switch (ot) {
     case OT_INT64:
@@ -42,7 +43,7 @@ JsonDumper::dump_primitive(const obj_t* obj) {
         break;
 
     case OT_STR:
-        dump_str(obj);
+        dump_str(the_obj);
         return;
 
     default:
@@ -53,14 +54,16 @@ JsonDumper::dump_primitive(const obj_t* obj) {
 }
 
 void
-JsonDumper::dump_str(const obj_t* obj) {
+JsonDumper::dump_str(const obj_t* str_obj) {
+    obj_primitive_t* obj = (obj_primitive_t*)(void*)str_obj;
+
     // step 1: figure out
     ASSERT(obj->obj_ty == OT_STR);
 
     int buf_len = 2; // for two double-quotes.
     {
         const char* str = obj->str_val;
-        for (int i = 0, e = obj->str_len; i < e; i++) {
+        for (int i = 0, e = str_obj->str_len; i < e; i++) {
             char c = str[i];
             if (isprint(c)) {
                 buf_len ++;
@@ -88,7 +91,7 @@ JsonDumper::dump_str(const obj_t* obj) {
         char *dest = _buf + _content_len;
 
         *dest++ = '"';
-        for (int i = 0, e = obj->str_len; i < e; i++) {
+        for (int i = 0, e = str_obj->str_len; i < e; i++) {
             char c = src[i];
             if (isprint(c)) {
                 if (c == '"' || c == '\\') {
@@ -126,11 +129,23 @@ JsonDumper::dump_str(const obj_t* obj) {
 void
 JsonDumper::dump_array(const obj_t* obj) {
     ASSERT(obj->obj_ty == OT_ARRAY);
-
-    output_char('[');
+    obj_composite_t* array_obj = (obj_composite_t*)(void*)obj;
+    obj_t* elmt_slist = array_obj->subobjs;
 
     int elmt_num = obj->elmt_num;
-    obj_t** elmt_vect = obj->elmt_vect;
+    obj_t** elmt_vect = new obj_t*[obj->elmt_num];
+
+    int i = elmt_num - 1;
+    for (; elmt_slist != 0 && i >= 0; elmt_slist = elmt_slist->next, i --) {
+        elmt_vect[i] = elmt_slist;
+    }
+
+    if (elmt_slist) {
+        fprintf(stderr, "array elements list seems to be corrupted\n");
+        return;
+    }
+
+    output_char('[');
     for (int i = 0; i < elmt_num; i++) {
         obj_t* elmt = elmt_vect[i];
         dump_obj(elmt);
@@ -139,16 +154,31 @@ JsonDumper::dump_array(const obj_t* obj) {
         }
     }
     output_char(']');
+
+    delete[] elmt_vect;
 }
 
 void
 JsonDumper::dump_hashtab(const obj_t* obj) {
     ASSERT(obj->obj_ty == OT_HASHTAB);
+    obj_composite_t* htab_obj = (obj_composite_t*)(void*)obj;
+    obj_t* elmt_slist = htab_obj->subobjs;
+
+    int elmt_num = obj->elmt_num;
+    obj_t** elmt_vect = new obj_t*[obj->elmt_num];
+
+    int i = elmt_num - 1;
+    for (; elmt_slist != 0 && i >= 0; elmt_slist = elmt_slist->next, i --) {
+        elmt_vect[i] = elmt_slist;
+    }
+
+    if (elmt_slist) {
+        fprintf(stderr, "array elements list seems to be corrupted\n");
+        return;
+    }
 
     output_char('{');
 
-    int elmt_num = obj->elmt_num;
-    obj_t** elmt_vect = obj->elmt_vect;
     for (int i = 0; i < elmt_num; i+=2) {
         obj_t* key = elmt_vect[i];
         dump_obj(key);
@@ -159,6 +189,8 @@ JsonDumper::dump_hashtab(const obj_t* obj) {
         dump_obj(val);
     }
     output_char('}');
+
+    delete[] elmt_vect;
 }
 
 void

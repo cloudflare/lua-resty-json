@@ -13,32 +13,17 @@
  ****************************************************************************
  */
 
-/* when come across a nesting composite object, and pop the stack when this
- * composite objects are successfully parsed and emitted.
- */
-typedef struct {
-    mempool_t* mempool;
-
-    list_t stack;
-
-    /* to recycle stack element (composite_state_t) */
-    slist_t free_comp_state;
-
-    /* to recycle the elements of composite_state_t::sub_objs.*/
-    slist_t free_sub_objs;
-} pstack_t;
-
 /* state of parsing composite object */
-typedef struct {
-    int16_t obj_ty;      /* array/hashtab/root(dummy) */
-    int16_t parse_state;
-    int16_t begin_line;
-    int16_t begin_colomn;
-    slist_t sub_objs;    /* list of elements of this composiste objects */
-} composite_state_t;
+typedef struct composite_state_tag composite_state_t;
+struct composite_state_tag {
+    obj_composite_t obj;
+    int parse_state;
+    composite_state_t* prev;
+    composite_state_t* next;
+};
 
 typedef struct {
-    pstack_t parse_stack;
+    composite_state_t parse_stack;
     scaner_t scaner;
     const char* err_msg;
     mempool_t* mempool;
@@ -48,12 +33,6 @@ typedef struct {
      *  array.
      */
     obj_t* result;
-
-    /* last_emitted_obj points the last element of "result" (which is the singly
-     * linked list).
-     */
-    composite_obj_t* last_emitted_cobj;
-
     int next_cobj_id; /* next composite object id */
 } parser_t;
 
@@ -63,29 +42,14 @@ typedef struct {
  *
  ****************************************************************************
  */
-static inline void
-pstack_init(pstack_t* ps, mempool_t* mp) {
-    list_init(&ps->stack);
-    ps->mempool = mp;
-
-    slist_init(&ps->free_comp_state);
-    slist_init(&ps->free_sub_objs);
-}
-
 static inline composite_state_t*
-pstack_top(pstack_t* s) {
-    list_t* l = &s->stack;
-    if (l->size) {
-        list_elmt_t* top = l->sentinel.next;
-        composite_state_t* cs = LIST_ELMT_PAYLOAD(top, composite_state_t);
-        return cs;
-    }
-    return 0;
+pstack_top(parser_t* parser) {
+    composite_state_t* ps = &parser->parse_stack;
+    return ps->prev;
 }
 
-int pstack_push(pstack_t* s, obj_ty_t, int init_state);
-void pstack_pop(pstack_t* s);
-static inline int pstack_empty(pstack_t* s) { return list_empty(&s->stack); }
+int pstack_push(parser_t*, obj_ty_t, int init_state);
+composite_state_t* pstack_pop(parser_t*);
 
 /****************************************************************************
  *
@@ -93,7 +57,7 @@ static inline int pstack_empty(pstack_t* s) { return list_empty(&s->stack); }
  *
  ****************************************************************************
  */
-int emit_primitive_tk(mempool_t* mp, token_t* tk, slist_t* sub_obj_list);
+int emit_primitive_tk(mempool_t* mp, token_t* tk, obj_composite_t* nesting_obj);
 
 static inline int
 insert_primitive_subobj(mempool_t* mp, slist_t* subobj_list, obj_t* subobj) {
@@ -106,10 +70,10 @@ insert_primitive_subobj(mempool_t* mp, slist_t* subobj_list, obj_t* subobj) {
     return 1;
 }
 
-int insert_subobj(parser_t* parser, composite_obj_t* subobj);
+void insert_subobj(obj_composite_t* nesting, obj_t* nested);
 
 void __attribute__((format(printf, 2, 3), cold))
-    set_parser_err_fmt(parser_t* parser, const char* fmt, ...);
+set_parser_err_fmt(parser_t* parser, const char* fmt, ...);
 
 void __attribute__((cold)) set_parser_err(parser_t*, const char* str);
 

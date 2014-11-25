@@ -10,63 +10,78 @@
 
 #include "parser.h"
 
-/* Return 1 on success, or 0 otherwise (due to OOM) */
-static int pstack_add_subobj(pstack_t* s, composite_state_t* level, obj_t* subojb);
-
-static inline int
-pstack_add_subobj_to_top(pstack_t* s, obj_t* subobj) {
-    return pstack_add_subobj(s, pstack_top(s), subobj);
+/* **************************************************************************
+ *
+ *          About parse stack
+ *
+ * **************************************************************************
+ */
+static inline void
+init_obj(obj_t* obj, obj_ty_t ty) {
+    obj->next = 0;
+    obj->obj_ty = ty;
+    obj->elmt_num = 0;
 }
 
-static inline list_elmt_t*
-alloc_composite_state(pstack_t *s) {
-    slist_t* free_comp_state = &s->free_comp_state;
-    if (!slist_empty(free_comp_state)) {
-        slist_elmt_t* e = slist_delete_first(free_comp_state);
-        return (list_elmt_t*)(void*)e;
-    }
-    uint32_t elmt_sz = list_elmt_size(sizeof(composite_state_t));
-    list_elmt_t* e = (list_elmt_t*)mp_alloc(s->mempool, elmt_sz);
-    return e;
+static inline void
+init_composite_obj(obj_composite_t* obj, obj_ty_t ty, uint32_t id) {
+    init_obj(&obj->common, ty);
+    obj->subobjs = 0;
+    obj->id = id;
+}
+static inline composite_state_t*
+alloc_composite_state(parser_t* parser) {
+    composite_state_t* cs;
+    cs = MEMPOOL_ALLOC_TYPE(parser->mempool, composite_state_t);
+    return cs;
+}
+
+static void
+pstack_init(parser_t* parser) {
+    composite_state_t* cs = &parser->parse_stack;
+    init_composite_obj(&cs->obj, OT_ROOT, 0);
+
+    cs->next = 0;
+    cs->prev = cs;  /* this is *top* */
 }
 
 int
-pstack_push(pstack_t* s, obj_ty_t obj_ty, int init_state) {
-    list_elmt_t* e = alloc_composite_state(s);
-    if (e) {
-        composite_state_t* cs = LIST_ELMT_PAYLOAD(e, composite_state_t);
-        cs->obj_ty = obj_ty;
-        cs->parse_state = init_state;
-        slist_init(&cs->sub_objs);
+pstack_push(parser_t* parser, obj_ty_t obj_ty, int init_state) {
+    /* Step 1: Allocate an stack element */
+    composite_state_t* cs = alloc_composite_state(parser);
+    if (unlikely(!cs))
+        return 0;
 
-        list_t* l = &s->stack;
-        list_insert_after(l, &l->sentinel, e);
-        return 1;
-    }
+    /* Step 2: Initialize the corresponding composite object. */
+    obj_composite_t* cobj = &cs->obj;
+    init_composite_obj(cobj, obj_ty, parser->next_cobj_id++);
 
-    return 0;
+    /* link the composite objects in reverse-nesting order */
+    cobj->reverse_nesting_order = (obj_composite_t*)(void*)parser->result;
+    parser->result = &cobj->common;
+
+    /* Step 3: Push one level */
+    cs->parse_state = init_state;
+    cs->next = 0;
+
+    composite_state_t* root = &parser->parse_stack;
+    composite_state_t* top = root->prev;
+    cs->prev = top;
+    root->prev = cs; /* update the "top" */
+
+    return 1;
 }
 
-void
-pstack_pop(pstack_t* s) {
-    list_t* l = &s->stack;
-    ASSERT(l->size);
+composite_state_t*
+pstack_pop(parser_t* parser) {
+    composite_state_t* ps = &parser->parse_stack;
+    composite_state_t* top = ps->prev;
 
-    list_elmt_t* top = l->sentinel.next;
-    list_delete(l, top);
+    composite_state_t* new_top = top->prev;
+    new_top->next = 0;
+    ps->prev = new_top;
 
-    /* recycle elements of sub-object list */
-    composite_state_t* cs = LIST_ELMT_PAYLOAD(top, composite_state_t);
-    slist_splice(&s->free_sub_objs, &cs->sub_objs);
-
-    /* recycle the free stack element */
-    slist_prepend(&s->free_comp_state, (slist_elmt_t*)(void*)top);
-}
-
-
-int
-pstack_add_subobj(pstack_t* s, composite_state_t* level, obj_t* subobj) {
-    return insert_primitive_subobj(s->mempool, &level->sub_objs, subobj);
+    return new_top;
 }
 
 /***************************************************************************
@@ -80,7 +95,7 @@ pstack_add_subobj(pstack_t* s, composite_state_t* level, obj_t* subobj) {
 static inline obj_t*
 cvt_primitive_tk(mempool_t* mp, token_t* tk) {
     ASSERT(tk_is_primitive(tk));
-    obj_t* obj = MEMPOOL_ALLOC_TYPE(mp, obj_t);
+    obj_primitive_t* obj = MEMPOOL_ALLOC_TYPE(mp, obj_primitive_t);
     if (unlikely(!obj))
         return 0;
 
@@ -90,59 +105,27 @@ cvt_primitive_tk(mempool_t* mp, token_t* tk) {
             ((int)TT_BOOL == (int)OT_BOOL) &&
             ((int)TT_NULL == (int)OT_NULL)));
 
+    obj->common.obj_ty = tk->type;
+    obj->common.str_len = tk->str_len;
     obj->int_val = tk->int_val;
-    obj->obj_ty = tk->type;
-    obj->str_len = tk->str_len;
 
-    return obj;
+    return &obj->common;
 }
 
-/* Add sub-objects (aka elements) to the composite object being processed.
- * We use a singly-linked list (slist) to link the elements; first element is
- * at the end of the slist, while the last element is at the head of the list.
- * The reason for reverse order is that it's slist, and we prepend element
- * to the slist as we go.
- *
- *   To be pedantic, hashtab's element is key-value pair. For efficiency
- * reasons, we don't introduce a data-structure for key-value-pair. Instead,
- * view hashtab as a sequence with alternativing keys and values. So given,
- * hashtab ht = {k1:v1, ... kn:vn} in json, once it is successfully parsed,
- * its representation is vn, kn, ... v1, k1.
- */
-int
-insert_subobj(parser_t* parser, composite_obj_t* subobj) {
-    pstack_t* s = &parser->parse_stack;
-    composite_state_t* top = pstack_top(s);
-
-    if (!insert_primitive_subobj(parser->mempool, &top->sub_objs, &subobj->obj))
-        return 0;
-
-    if (subobj->obj.obj_ty <= OT_LAST_PRIMITIVE)
-        return 1;
-
-    /* Link the composite object in a reverse nesting order */
-    composite_obj_t* last = parser->last_emitted_cobj;
-    subobj->next = 0;
-
-    if (last) {
-        last->next = subobj;
-    } else {
-        parser->result = &subobj->obj;
-    }
-
-    parser->last_emitted_cobj = subobj;
-    return 1;
+void
+insert_subobj(obj_composite_t* nesting, obj_t* nested) {
+    nested->next = nesting->subobjs;
+    nesting->subobjs = nested;
+    nesting->common.elmt_num ++;
 }
 
-/* Emit primitive toekn, which include two steps:
- *   - Convert the token to objects, and
- *   - Add the object to its immediately enclosing composite object.
- */
 int
-emit_primitive_tk(mempool_t* mp, token_t* tk, slist_t* sub_obj_list) {
+emit_primitive_tk(mempool_t* mp, token_t* tk,
+                  obj_composite_t* nesting_cobj) {
     obj_t* obj = cvt_primitive_tk(mp, tk);
     if (obj) {
-        return insert_primitive_subobj(mp, sub_obj_list, obj);
+        insert_subobj(nesting_cobj, obj);
+        return 1;
     }
 
     return 0;
@@ -160,7 +143,7 @@ parse(parser_t* parser, const char* json,  uint32_t json_len) {
 
     scaner_t* scaner = &parser->scaner;
     const char* json_end = scaner->json_end;
-    pstack_push(&parser->parse_stack, OT_ROOT, 0 /* don't care */);
+    pstack_init(parser);
 
     token_t* tk = sc_get_token(scaner, json_end);
     token_ty_t tk_ty = tk->type;
@@ -181,13 +164,14 @@ parse(parser_t* parser, const char* json,  uint32_t json_len) {
         }
 
         while (succ) {
-            composite_state_t* top = pstack_top(&parser->parse_stack);
-            if (top->obj_ty == OT_HASHTAB) {
+            composite_state_t* top = pstack_top(parser);
+            obj_ty_t ot = top->obj.common.obj_ty;
+            if (ot == OT_HASHTAB) {
                 succ = parse_hashtab(parser);
-            } else if (top->obj_ty == OT_ARRAY) {
+            } else if (ot == OT_ARRAY) {
                 succ = parse_array(parser);
             } else {
-                ASSERT(top->obj_ty == OT_ROOT);
+                ASSERT(ot == OT_ROOT);
                 break;
             }
         }
@@ -230,10 +214,9 @@ reset_parser(parser_t* parser, const char* json, uint32_t json_len) {
     mempool_t* mp = parser->mempool;
     mp_free_all(mp);
 
-    pstack_init(&parser->parse_stack, mp);
+    pstack_init(parser);
     sc_init_scaner(&parser->scaner, mp, json, json_len);
     parser->result = 0;
-    parser->last_emitted_cobj = 0;
 
     parser->err_msg = 0;
     parser->next_cobj_id = 1;
@@ -259,7 +242,7 @@ jp_create(void) {
     p->result = 0;
     p->err_msg = "Out of Memory"; /* default error message :-)*/
 
-    pstack_init(&p->parse_stack, mp);
+    pstack_init(p);
     return (struct json_parser*)(void*)p;
 }
 
@@ -326,8 +309,10 @@ set_parser_err(parser_t* parser, const char* str) {
 }
 
 static void __attribute__((cold))
-dump_primitive_obj (FILE* f, obj_t* obj) {
-    switch (obj->obj_ty) {
+dump_primitive_obj (FILE* f, obj_t* the_obj) {
+    obj_primitive_t* obj = (obj_primitive_t*)(void*)the_obj;
+
+    switch (the_obj->obj_ty) {
     case OT_INT64:
         fprintf(f, "%" PRIi64, obj->int_val);
         break;
@@ -339,7 +324,7 @@ dump_primitive_obj (FILE* f, obj_t* obj) {
     case OT_STR:
         {
             int idx = 0;
-            int len = obj->str_len;
+            int len = the_obj->str_len;
             fputc('"', f);
             for (; idx < len; idx++) {
                 char c = obj->str_val[idx];
@@ -368,6 +353,76 @@ dump_primitive_obj (FILE* f, obj_t* obj) {
 }
 
 void __attribute__((cold))
+dump_composite_obj(FILE* f, obj_composite_t* cobj) {
+    obj_ty_t type = cobj->common.obj_ty;
+    if (type != OT_ARRAY && type != OT_HASHTAB) {
+        fprintf(f, "unknown composite type %d\n", (int)type);
+        return;
+    }
+
+    obj_t* elmt_slist = cobj->subobjs;
+    int elmt_num = cobj->common.elmt_num;
+
+    obj_t** elmt_vect = (obj_t**)malloc(sizeof(obj_t*) * elmt_num);
+    int i = elmt_num - 1;
+    while (elmt_slist) {
+        elmt_vect[i] = elmt_slist;
+        elmt_slist = elmt_slist->next;
+        i--;
+    }
+
+    if (i != -1) {
+        free(elmt_vect);
+        fprintf(f, "the numbers of elements disagree\n");
+        return;
+    }
+
+    if (type == OT_ARRAY) {
+        fprintf (f, "[ (id:%d) ", cobj->id);
+        int i;
+        for(i = 0; i < elmt_num; i++) {
+            obj_t* elmt = elmt_vect[i];
+            if (elmt->obj_ty <= OT_LAST_PRIMITIVE) {
+                dump_primitive_obj(f, elmt);
+            } else {
+                int id = ((obj_composite_t*)(void*)elmt)->id;
+                fprintf(f, "obj-%d", id);
+            }
+
+            if (i != elmt_num - 1)
+                fputs(", ", f);
+        }
+        fputs("]\n", f);
+    } else {
+        ASSERT(type == OT_HASHTAB);
+        ASSERT((elmt_num & 1) == 0);
+
+        fprintf(f, "{ (id:%d) ", cobj->id);
+        int i;
+        for(i = 0; i < elmt_num; i+=2) {
+            obj_t* key = elmt_vect[i];
+            obj_t* val = elmt_vect[i+1];
+            dump_primitive_obj(f, key);
+
+            fputc(':', f);
+
+            if (val->obj_ty <= OT_LAST_PRIMITIVE) {
+                dump_primitive_obj(f, val);
+            } else {
+                int id = ((obj_composite_t*)(void*)val)->id;
+                fprintf(f, "obj-%d", id);
+            }
+
+            if (i != elmt_num - 2)
+                fputs(", ", f);
+        }
+        fputs("}\n", f);
+    }
+
+    free(elmt_vect);
+}
+
+void __attribute__((cold))
 dump_obj(FILE* f, obj_t* obj) {
     if (!obj) {
         fprintf(f, "null\n");
@@ -380,55 +435,9 @@ dump_obj(FILE* f, obj_t* obj) {
         fputc('\n', f);
     }
 
-    composite_obj_t* cobj = (composite_obj_t*)(void*)obj;
-    obj_t** elmts = obj->elmt_vect;
-    int elmt_num = obj->elmt_num;
-
-    if (type == OT_ARRAY) {
-        fprintf (f, "[ (id:%d) ", cobj->id);
-        int i;
-        for(i = 0; i < elmt_num; i++) {
-            obj_t* elmt = elmts[i];
-            if (elmt->obj_ty <= OT_LAST_PRIMITIVE) {
-                dump_primitive_obj(f, elmt);
-            } else {
-                int id = ((composite_obj_t*)(void*)elmt)->id;
-                fprintf(f, "obj-%d", id);
-            }
-
-            if (i != elmt_num - 1)
-                fputs(", ", f);
-        }
-        fputs("]\n", f);
-        return;
-    }
-
-    ASSERT(type == OT_HASHTAB);
-    ASSERT((elmt_num & 1) == 0);
-
-    fprintf(f, "{ (id:%d) ", cobj->id);
-    int i;
-    for(i = 0; i < elmt_num; i+=2) {
-        obj_t* key = elmts[i];
-        obj_t* val = elmts[i+1];
-        dump_primitive_obj(f, key);
-
-        fputc(':', f);
-
-        if (val->obj_ty <= OT_LAST_PRIMITIVE) {
-            dump_primitive_obj(f, val);
-        } else {
-            int id = ((composite_obj_t*)(void*)val)->id;
-            fprintf(f, "obj-%d", id);
-        }
-
-        if (i != elmt_num - 2)
-            fputs(", ", f);
-    }
-    fputs("}\n", f);
-
-    if (cobj->next) {
-        dump_obj(f, (obj_t*)(void*)cobj->next);
+    obj_composite_t* cobj = (obj_composite_t*)(void*)obj;
+    for (; cobj; cobj = cobj->reverse_nesting_order) {
+        dump_composite_obj(f, cobj);
     }
 }
 

@@ -18,13 +18,9 @@ typedef enum {
 
 struct obj_tag;
 typedef struct obj_tag obj_t;
+
 struct obj_tag {
-    union {
-        char* str_val;
-        int64_t int_val;
-        double db_val;
-        obj_t** elmt_vect; /* element vector for array/hashtab*/
-    };
+    obj_t* next;
     int32_t obj_ty;
     union {
         int32_t str_len;
@@ -32,12 +28,22 @@ struct obj_tag {
     };
 };
 
-struct composite_obj_tag;
-typedef struct composite_obj_tag composite_obj_t;
+/* primitive object */
+typedef struct {
+    obj_t common;
+    union {
+        char* str_val;
+        int64_t int_val;
+        double db_val;
+    };
+} obj_primitive_t;
 
-struct composite_obj_tag {
-    obj_t obj;
-    composite_obj_t* next;
+struct obj_composite_tag;
+typedef struct obj_composite_tag obj_composite_t;
+struct obj_composite_tag {
+    obj_t common;
+    obj_t* subobjs;
+    obj_composite_t* reverse_nesting_order;
     uint32_t id;
 };
 
@@ -50,7 +56,8 @@ const char* jp_get_err(struct json_parser*);
 void jp_destroy(struct json_parser*);
 ]]
 
-local cobj_ptr_t = ffi.typeof("composite_obj_t*")
+local cobj_ptr_t = ffi.typeof("obj_composite_t*")
+local pobj_ptr_t = ffi.typeof("obj_primitive_t*")
 local obj_ptr_t = ffi.typeof("obj_t*")
 
 local ffi_cast = ffi.cast
@@ -134,11 +141,11 @@ local create_hashtab
 local convert_obj
 
 create_primitive = function(obj)
-    local ty = obj.obj_ty
+    local ty = obj.common.obj_ty
     if ty == ty_int64 then
         return tonumber(obj.int_val)
     elseif ty == ty_str then
-        return ffi_string(obj.str_val, obj.str_len)
+        return ffi_string(obj.str_val, obj.common.str_len)
     elseif ty == ty_null then
         return nil
     elseif ty == ty_bool then
@@ -155,17 +162,17 @@ create_primitive = function(obj)
 end
 
 create_array = function(array, cobj_array)
-    local elmt_num = array.elmt_num
-    local elmt_vect = array.elmt_vect
+    local elmt_num = array.common.elmt_num
+    local elmt_list = array.subobjs
 
-    local result = {}
+    local result = tab_new(elmt_num, 0)
     for iter = 1, elmt_num do
-        local elmt = elmt_vect[iter - 1]
+        local elmt = elmt_list
 
         local elmt_obj = nil
         if elmt.obj_ty <= ty_last_primitive then
             local err;
-            elmt_obj, err = create_primitive(elmt)
+            elmt_obj, err = create_primitive(ffi_cast(pobj_ptr_t, elmt))
             if err then
                 return nil
             end
@@ -173,27 +180,31 @@ create_array = function(array, cobj_array)
             local cobj = ffi_cast(cobj_ptr_t, elmt);
             elmt_obj = cobj_array[cobj.id + 1]
         end
-        result[iter] = elmt_obj
+
+        result[elmt_num - iter + 1] = elmt_obj
+        elmt_list = elmt_list.next
     end
 
-    local array = ffi_cast(cobj_ptr_t, array)
     cobj_array[array.id + 1] = result
 
     return result;
 end
 
 create_hashtab = function(hashtab, cobj_array)
-    local elmt_num = hashtab.elmt_num
-    local elmt_vect = hashtab.elmt_vect
+    local elmt_num = hashtab.common.elmt_num
+    local elmt_list = hashtab.subobjs
 
-    local result = {}
+    local result = tab_new(elmt_num, elmt_num / 2)
     for iter = 1, elmt_num, 2 do
-        local key = elmt_vect[iter - 1]
-        local val = elmt_vect[iter]
+        local val = elmt_list
+        elmt_list = elmt_list.next
 
-        local key_obj = ffi_string(key.str_val, key.str_len)
+        local key = ffi_cast(pobj_ptr_t, elmt_list)
+
+        local key_obj = ffi_string(key.str_val, key.common.str_len)
         local val_obj = convert_obj(val, cobj_array)
         result[key_obj] = val_obj;
+        elmt_list = elmt_list.next
     end
 
     local ht = ffi_cast(cobj_ptr_t, hashtab)
@@ -205,11 +216,11 @@ end
 convert_obj = function(obj, cobj_array)
     local ty = obj.obj_ty
     if ty <= ty_last_primitive then
-        return create_primitive(obj)
+        return create_primitive(ffi_cast(pobj_ptr_t, obj))
     elseif ty == ty_array then
-        return create_array(obj, cobj_array)
+        return create_array(ffi_cast(cobj_ptr_t, obj), cobj_array)
     else
-        return create_hashtab(obj, cobj_array)
+        return create_hashtab(ffi_cast(cobj_ptr_t, obj), cobj_array)
     end
 end
 
@@ -230,7 +241,7 @@ function _M.parse(parser_inst, json)
     local last_val = nil
     repeat
         last_val = convert_obj(ffi_cast(obj_ptr_t, composite_objs), cobj_vect)
-        composite_objs = composite_objs.next
+        composite_objs = composite_objs.reverse_nesting_order
     until composite_objs == nil
 
     return last_val

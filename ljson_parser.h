@@ -22,13 +22,9 @@ typedef enum {
 
 struct obj_tag;
 typedef struct obj_tag obj_t;
+
 struct obj_tag {
-    union {
-        char* str_val;
-        int64_t int_val;
-        double db_val;
-        obj_t** elmt_vect; /* element vector for array/hashtab*/
-    };
+    obj_t* next;
     int32_t obj_ty;
     union {
         int32_t str_len;
@@ -36,12 +32,23 @@ struct obj_tag {
     };
 };
 
-struct composite_obj_tag;
-typedef struct composite_obj_tag composite_obj_t;
+/* primitive object */
+typedef struct {
+    obj_t common;
+    union {
+        char* str_val;
+        int64_t int_val;
+        double db_val;
+    };
+} obj_primitive_t;
 
-struct composite_obj_tag {
-    obj_t obj;
-    composite_obj_t* next;
+/* composite object */
+struct obj_composite_tag;
+typedef struct obj_composite_tag obj_composite_t;
+struct obj_composite_tag {
+    obj_t common;
+    obj_t* subobjs;
+    obj_composite_t* reverse_nesting_order;
     uint32_t id;
 };
 

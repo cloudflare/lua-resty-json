@@ -1,39 +1,13 @@
 #include "parser.h"
 
-static int
+static void
 emit_hashtab(parser_t* parser) {
-    pstack_t* ps = &parser->parse_stack;
-    composite_state_t* top = pstack_top(ps);
+    composite_state_t* top = pstack_top(parser);
+    ASSERT(top->obj.common.obj_ty == OT_HASHTAB);
 
-    int elmt_num = top->sub_objs.size;
-    ASSERT((elmt_num & 1) == 0);
-
-    composite_obj_t* ht = MEMPOOL_ALLOC_TYPE(parser->mempool, composite_obj_t);
-    if (unlikely(!ht)) {
-        return 0;
-    }
-
-    obj_t** elmt_vect = MEMPOOL_ALLOC_TYPE_N(parser->mempool, obj_t*, elmt_num);
-    slist_elmt_t* slist_elmt = top->sub_objs.first;
-
-    int idx = elmt_num - 1;
-    for (; idx >= 0; idx--) {
-        obj_t* elmt = (obj_t*)slist_elmt->ptr_val;
-        elmt_vect[idx] = elmt;
-        slist_elmt = slist_elmt->next;
-    }
-
-    ht->obj.obj_ty = OT_HASHTAB;
-    ht->obj.elmt_vect = elmt_vect;
-    ht->obj.elmt_num = elmt_num;
-    ht->id = parser->next_cobj_id++;
-
-    pstack_pop(ps);
-
-    /* Add this hashtab to the enclosing composite object */
-    insert_subobj(parser, ht);
-
-    return 1;
+    obj_t* array_obj = &top->obj.common;
+    composite_state_t* new_top = pstack_pop(parser);
+    insert_subobj(&new_top->obj, array_obj);
 }
 
 typedef enum {
@@ -44,16 +18,15 @@ typedef enum {
 } PKVP_STATE;
 
 int
-parse_keyval_pair(parser_t* parser, scaner_t* scaner) {
+parse_keyval_pair(parser_t* parser, obj_composite_t* htab_obj) {
+    scaner_t* scaner = &parser->scaner;
     const char* json_end = scaner->json_end;
+
     token_t* tk = sc_get_token(scaner, json_end);
-    pstack_t* ps = &parser->parse_stack;
-    composite_state_t* top = pstack_top(ps);
-    slist_t* subobj_list = &top->sub_objs;
 
     /* step 1: Parse the key string */
     if (tk->type == TT_STR) {
-        if (unlikely(!emit_primitive_tk(parser->mempool, tk, subobj_list))) {
+        if (unlikely(!emit_primitive_tk(parser->mempool, tk, htab_obj))) {
             return PKVP_ERR;
         }
     } else if (tk->type == TT_CHAR && tk->char_val == '}') {
@@ -77,7 +50,7 @@ parse_keyval_pair(parser_t* parser, scaner_t* scaner) {
     /* step 3: parse the 'value' part */
     tk = sc_get_token(scaner, json_end);
     if (tk_is_primitive(tk)) {
-        if (unlikely(!emit_primitive_tk(parser->mempool, tk, subobj_list)))
+        if (unlikely(!emit_primitive_tk(parser->mempool, tk, htab_obj)))
             return PKVP_ERR;
         return PKVP_DONE;
     }
@@ -109,8 +82,8 @@ int
 parse_hashtab(parser_t* parser) {
     scaner_t* scaner = &parser->scaner;
     const char* json_end = scaner->json_end;
-    pstack_t* ps = &parser->parse_stack;
-    composite_state_t* state = pstack_top(ps);
+
+    composite_state_t* state = pstack_top(parser);
     PHT_STATE parse_state = state->parse_state;
 
     while (1) {
@@ -123,15 +96,10 @@ parse_hashtab(parser_t* parser) {
          */
         if (parse_state == PHT_PARSING_MORE_ELMT) {
             token_t* tk = sc_get_token(scaner, json_end);
-            if (unlikely(!tk)) {
-                parser->err_msg = scaner->err_msg;
-                return 0;
-            }
-
             if (tk->type == TT_CHAR) {
                 char c = tk->char_val;
                 if (c == ',') {
-                    PKVP_STATE ret = parse_keyval_pair(parser, scaner);
+                    PKVP_STATE ret = parse_keyval_pair(parser, &state->obj);
                     if (ret == PKVP_DONE)
                         continue;
                     else if (ret == PKVP_COMPOSITE) {
@@ -143,7 +111,8 @@ parse_hashtab(parser_t* parser) {
                 }
 
                 if (c == '}') {
-                    return emit_hashtab(parser);
+                    emit_hashtab(parser);
+                    return 1;
                 }
             }
 
@@ -152,7 +121,7 @@ parse_hashtab(parser_t* parser) {
 
         if (parse_state == PHT_JUST_BEGUN) {
             state->parse_state = PHT_PARSING_1st_ELMT;
-            PKVP_STATE ret = parse_keyval_pair(parser, scaner);
+            PKVP_STATE ret = parse_keyval_pair(parser, &state->obj);
             switch (ret) {
             case PKVP_DONE:
                 parse_state = PHT_PARSING_MORE_ELMT;
@@ -162,7 +131,8 @@ parse_hashtab(parser_t* parser) {
                 return 1;
 
             case PKVP_CLOSE:
-                return emit_hashtab(parser);
+                emit_hashtab(parser);
+                return 1;
 
             default:
                 goto err_out;
@@ -180,7 +150,7 @@ err_out:
 
 int
 start_parsing_hashtab(parser_t* parser) {
-    if (!pstack_push(&parser->parse_stack, OT_HASHTAB, PHT_JUST_BEGUN))
+    if (!pstack_push(parser, OT_HASHTAB, PHT_JUST_BEGUN))
         return 0;
 
     return parse_hashtab(parser);

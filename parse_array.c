@@ -2,39 +2,16 @@
 #include "parser.h"
 
 static const char* syntax_err = "Array syntax error, expect ',' or ']'";
-static int
+
+/* Emit this array by adding it to the nesting composite data structure. */
+static void
 emit_array(parser_t* parser) {
-    composite_state_t* top = pstack_top(&parser->parse_stack);
-    ASSERT(top->obj_ty == OT_ARRAY);
+    composite_state_t* top = pstack_top(parser);
+    ASSERT(top->obj.common.obj_ty == OT_ARRAY);
 
-    composite_obj_t* array_obj =
-        MEMPOOL_ALLOC_TYPE(parser->mempool, composite_obj_t);
-    if (unlikely(!array_obj))
-        return 0;
-
-    slist_t* sub_objs = &top->sub_objs;
-    int elmt_num = sub_objs->size;
-
-    obj_t** elmt_vect = 0;
-    if (elmt_num != 0) {
-        elmt_vect = MEMPOOL_ALLOC_TYPE_N(parser->mempool, obj_t*, elmt_num);
-        if (unlikely(!elmt_vect))
-            return 0;
-
-        slist_elmt_t* iter = top->sub_objs.first;
-        int idx = elmt_num - 1;
-        for (; iter != 0; iter = iter->next, idx--) {
-            elmt_vect[idx] = (obj_t*)iter->ptr_val;
-        }
-    }
-
-    array_obj->obj.obj_ty = OT_ARRAY;
-    array_obj->obj.elmt_num = elmt_num;
-    array_obj->obj.elmt_vect = elmt_vect;
-    array_obj->id = parser->next_cobj_id++;
-
-    pstack_pop(&parser->parse_stack);
-    return insert_subobj(parser, array_obj);
+    obj_t* array_obj = &top->obj.common;
+    composite_state_t* new_top = pstack_pop(parser);
+    insert_subobj(&new_top->obj, array_obj);
 }
 
 /* state returned from parse_array_elmt */
@@ -52,10 +29,10 @@ typedef enum {
 } PAE_STATE;
 
 static PAE_STATE
-parse_array_elmt(parser_t* parser, token_t* tk, slist_t* sub_obj_list) {
+parse_array_elmt(parser_t* parser, obj_composite_t* array_obj, token_t* tk) {
     /* case 1: The token contains an primitive object */
     if (tk_is_primitive(tk)) {
-        if (emit_primitive_tk(parser->mempool, tk, sub_obj_list))
+        if (emit_primitive_tk(parser->mempool, tk, array_obj))
             return PAE_DONE;
         return PAE_ERR;
     }
@@ -105,9 +82,7 @@ int
 parse_array(parser_t* parser) {
     scaner_t* scaner = &parser->scaner;
     const char* json_end = scaner->json_end;
-    composite_state_t* state = pstack_top(&parser->parse_stack);
-    slist_t* sub_obj_list = &state->sub_objs;
-
+    composite_state_t* state = pstack_top(parser);
     PA_STATE parse_state = state->parse_state;
 
     while (1) {
@@ -124,7 +99,7 @@ parse_array(parser_t* parser) {
                 char c = delimiter->char_val;
                 if (c == ',') {
                     token_t* tk = sc_get_token(scaner, json_end);
-                    PAE_STATE ret = parse_array_elmt(parser, tk, sub_obj_list);
+                    PAE_STATE ret = parse_array_elmt(parser, &state->obj, tk);
                     if (ret == PAE_DONE)
                         continue;
                     else if (ret == PAE_COMPOSITE) {
@@ -137,7 +112,8 @@ parse_array(parser_t* parser) {
                 }
 
                 if (c == ']') {
-                    return emit_array(parser);
+                    emit_array(parser);
+                    return 1;
                 }
             }
             goto err_out;
@@ -146,7 +122,7 @@ parse_array(parser_t* parser) {
         /* case 2: Just saw '[', and try to parse the first element. */
         if (parse_state == PA_JUST_BEGUN) {
             token_t* tk = sc_get_token(scaner, json_end);
-            PAE_STATE ret = parse_array_elmt(parser, tk, sub_obj_list);
+            PAE_STATE ret = parse_array_elmt(parser, &state->obj, tk);
             switch (ret) {
             case PAE_DONE:
                 parse_state = PA_PARSING_MORE_ELMT;
@@ -159,7 +135,8 @@ parse_array(parser_t* parser) {
 
             case PAE_CLOSE:
                 /* This is an empty array */
-                return emit_array(parser);
+                emit_array(parser);
+                return 1;
 
             default:
                 goto err_out;
@@ -180,7 +157,7 @@ err_out:
 
 int
 start_parsing_array(parser_t* parser) {
-    if (!pstack_push(&parser->parse_stack, OT_ARRAY, PA_JUST_BEGUN))
+    if (!pstack_push(parser, OT_ARRAY, PA_JUST_BEGUN))
         return 0;
 
     return parse_array(parser);
