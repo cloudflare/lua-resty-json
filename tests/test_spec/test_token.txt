@@ -5,7 +5,6 @@
 #
 ###########################################################
 #
-
 #!!!!!!!!!!! test boolean token !!!!!!!!!!!!!!!!!!
 input: [   true    ]
 output: [true]
@@ -34,3 +33,27 @@ output: ["l\"ol"]
 # test string escape
 input: [ "\"\\\/\b\f\n\r\t\"" ]
 output: ["\"\\\/\b\f\n\r\t\""]
+
+# !!!!!!!!! integer and floating point number !!!!!!!!
+input: [ 1230]
+output: [1230]
+
+# note: we print fp with 8 digit in precision
+input: [ 12.3]
+output: [12.30000000]
+
+# 18446744073709551615 == (uint64_t)-1.
+# For integer with 20 or more digit, we will convert it to floating point.
+#
+input: [18446744073709551615]
+output: [18446744073709551616.00000000]
+
+input: [1844674407370955161]
+output: [1844674407370955161]
+
+# 18446744073709551616 is too big to fit in int64_t
+input: [18446744073709551616]
+output: [18446744073709551616.00000000]
+
+input: [-2]
+output: [-2]

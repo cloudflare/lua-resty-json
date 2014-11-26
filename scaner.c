@@ -169,7 +169,7 @@ scan_fp(const char** scan_str, const char* str_e, int_db_union_t* result) {
             str++;
         } else {
             if (c != '.' && (c | 0x20) != 'e') {
-                if (str - str_save <= 20) {
+                if (str - str_save < 20) {
                     /* It's guarantee to fit in int64_t */
                     if (!is_negative) {
                         result->int_val = int_val;

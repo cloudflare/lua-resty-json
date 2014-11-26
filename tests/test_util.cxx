@@ -30,7 +30,7 @@ JsonDumper::dump_primitive(const obj_t* the_obj) {
         break;
 
     case OT_FP:
-        dump_len = snprintf(buf, buf_size, "%.4f", obj->db_val);
+        dump_len = snprintf(buf, buf_size, "%.8f", obj->db_val);
         break;
 
     case OT_BOOL:
