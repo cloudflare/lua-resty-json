@@ -101,7 +101,12 @@ test_driver(const char* test_spec_file, const char* message,
 int
 main(int argc, char** argv) {
     test_driver("test_spec/test_token.txt", "Scaner testing cases");
+    test_driver("test_spec/test_composite.txt", "Test array/hashtab");
     test_driver("test_spec/test_diagnostic.txt", "Test diagnoistic information", true);
-    //test_driver("a.txt", "Scaner testing cases");
+
+    fprintf(stdout,
+            "\nSummary\n=====================================\n Test: %d, fail :%d\n",
+            test_num, fail_num);
+
     return (fail_num != 0 || test_spec_wrong) ? 1 : 0;
 }

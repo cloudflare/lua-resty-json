@@ -187,6 +187,10 @@ JsonDumper::dump_hashtab(const obj_t* obj) {
 
         obj_t* val= elmt_vect[i+1];
         dump_obj(val);
+
+        if (i + 2 != elmt_num) {
+            output_char(',');
+        }
     }
     output_char('}');
 
@@ -224,7 +228,20 @@ JsonDumper::dump(const obj_t* obj) {
         _buf = (char*)malloc(_buf_len);
     }
 
-    dump_obj(obj);
+    const obj_t* outmost = obj;
+    obj_ty_t ot = (obj_ty_t) obj->obj_ty;
+    if (ot > OT_LAST_PRIMITIVE) {
+        obj_composite_t* cobj = (obj_composite_t*)(void*)obj;
+        do {
+            if ((cobj = cobj->reverse_nesting_order)) {
+                outmost = (obj_t*)(void*)cobj;
+            } else {
+                break;
+            }
+        } while (true);
+    }
+
+    dump_obj(outmost);
     _buf[_content_len] = '\0';
 }
 

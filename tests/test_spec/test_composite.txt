@@ -1,0 +1,14 @@
+input: [1 , 2, "lol"]
+output: [1,2,"lol"]
+
+input: [1, 2, {"key":34}]
+output: [1,2,{"key":34}]
+
+input: [1, 2, {"key":[3, 4, "5"]}]
+output: [1,2,{"key":[3,4,"5"]}]
+
+input: {"key":[3, 4, "5"], "key2":67}
+output:{"key":[3,4,"5"],"key2":67}
+
+input: {"key":[3, 4, "5"], "key2":{"key3":"value3"}}
+input: {"key":[3,4,"5"],"key2":{"key3":"value3"}}
