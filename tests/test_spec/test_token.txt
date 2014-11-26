@@ -30,3 +30,7 @@ output: ["lol"]
 
 input: [ "l\"ol"]
 output: ["l\"ol"]
+
+# test string escape
+input: [ "\"\\\/\b\f\n\r\t\"" ]
+output: ["\"\\\/\b\f\n\r\t\""]

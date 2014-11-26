@@ -67,7 +67,7 @@ JsonDumper::dump_str(const obj_t* str_obj) {
             char c = str[i];
             if (isprint(c)) {
                 buf_len ++;
-                if (c == '"' || c == '\\') buf_len ++;
+                if (c == '"' || c == '\\' || c == '/') buf_len ++;
                 continue;
             }
 
@@ -94,7 +94,7 @@ JsonDumper::dump_str(const obj_t* str_obj) {
         for (int i = 0, e = str_obj->str_len; i < e; i++) {
             char c = src[i];
             if (isprint(c)) {
-                if (c == '"' || c == '\\') {
+                if (c == '"' || c == '\\' || c == '/') {
                     *dest++ = '\\';
                 }
 
@@ -108,6 +108,7 @@ JsonDumper::dump_str(const obj_t* str_obj) {
             case '\f': esc = 'f'; break;
             case '\r': esc = 'r'; break;
             case '\n': esc = 'n'; break;
+            case '\t': esc = 't'; break;
             default: ;
             };
 
