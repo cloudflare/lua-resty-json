@@ -1,3 +1,53 @@
+/* ************************************************************************
+ *
+ *  This file implements the json parser.
+ *
+ * Working example and terminology
+ * ================================
+ * We use following json to depict
+ * how it works:
+ *   [1, 2, {"key": 3.4}]
+ *
+ *   We call [...] as *array*, and {...} as *hashtab*. Array and hashtab are
+ * *composite objects*, and number/string/boolean/null are *primitive objects*.
+ *
+ *  This json snippet has two composite objects:
+ *   - O2: is a hash-table having only one element with key being "key", and
+ *         value being 3.4.
+ *   - O1: is a array containing three elements, i.e. 1, 2 and O2.
+ *
+ *  O2 is *nested* in O1, and O1 is O2's *immediate nesting* composite object.
+ *
+ * How it works
+ * =============
+ * The parser walks the input json from left to right, calling scaner to get a
+ * token at a time. The scaner recognizes following tokens in order:
+ *
+ *   token type           value
+ *   ---------------------------
+ *     char               '['
+ *     number              1
+ *     char               ','
+ *     number              2
+ *     char               ','
+ *     cahr               '{'
+ *     string             "key"
+ *     ....
+ *
+ *   At the heart of the parser is a *parsing-stack*, which push a level when
+ * seeing the starting delimiter of a composite object (e.g. seeing '[' of
+ * an array), and pop until the closing delimiter of the same composite object
+ * is seen). So, the parse-stack is in essence mimicking the nesting
+ * relationship. Actually in our implementation, the stack element contains
+ * a data structure keeping track of the current composite object being
+ * processed.
+ *
+ *  The result of the parser is organized in reverse-nesting order linked
+ * in a singly-linked list. See the comment to jp_parse() in ljson_parser.h
+ * for details.
+ *
+ * ************************************************************************
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -7,12 +57,11 @@
 #include "mempool.h"
 #include "adt.h"
 #include "scaner.h"
-
 #include "parser.h"
 
 /* **************************************************************************
  *
- *          About parse stack
+ *              About parse-stack.
  *
  * **************************************************************************
  */
@@ -29,6 +78,7 @@ init_composite_obj(obj_composite_t* obj, obj_ty_t ty, uint32_t id) {
     obj->subobjs = 0;
     obj->id = id;
 }
+
 static inline composite_state_t*
 alloc_composite_state(parser_t* parser) {
     composite_state_t* cs;

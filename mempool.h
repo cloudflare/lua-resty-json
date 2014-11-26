@@ -1,6 +1,27 @@
+/* ****************************************************************************
+ *
+ *   The mempool is used to speedup memory allocation. Mempool allocate pape-size
+ * "chunks" by calling malloc(), and the subsequent memory allocation is done by
+ * carving block from the these chunks. A block dose not have management overhead,
+ * and mempool dose not try to reclaim individual block, but it can free all the
+ * blocks in one stroke.
+ *
+ *  The interface functions are:
+ *  =============================
+ *  o. mp_create : create a memory pool instance.
+ *  o. mp_destroy: destroy the memory pool instance.
+ *  o. mp_alloc(mempool, size) : allocate a block having at least "size"-byte.
+ *                               block is 8-byte aligned.
+ *  o. mp_free_all() : free all blocks allocated so far.
+ *
+ * ****************************************************************************
+ */
 #ifndef MEM_POOL_H
 #define MEM_POOL_H
 
+/* A chunk is typically 4k-byte in size; the management structure resides at
+ * the beginning of the chunk.
+ */
 typedef struct chunk_hdr chunk_hdr_t;
 struct chunk_hdr {
     chunk_hdr_t* next;
@@ -45,7 +66,10 @@ mp_alloc(mempool_t* mp, int size) {
     return mp_alloc_slow(mp, size);
 }
 
+/* To allocate a block of type "t" */
 #define MEMPOOL_ALLOC_TYPE(mp, t) ((t*)mp_alloc((mp), sizeof(t)))
+
+/* To allocate an array with "n" elements. Elements are of type "t".*/
 #define MEMPOOL_ALLOC_TYPE_N(mp, t, n) ((t*)mp_alloc((mp), sizeof(t) * (n)))
 
 #endif

@@ -1,3 +1,35 @@
+/* ****************************************************************************
+ *
+ *   The scaner is to decompose input json into tokens. A json
+ * number/string/bool/null will be recognized as a single "primitive" token,
+ * and a delimiter (i.e. one of ":,[]{}") is recognized as a token of TT_char
+ * type.
+ *
+ *   The scaner is driven by the parser (parser*.c), recognizing one token at
+ * a time. The last token is TT_END token indicating the end of input json.
+ *
+ *   Scaner keeps track of the location of input json as it moves on. If a token
+ * was successfully recognized, scaner_t::line_num/col_num refers to the point
+ * right after the token;  if it comes across any lexical error, TT_ERR token is
+ * returned, and the scaner_t::line_num/col_num points to starting location where
+ * the problem take place.
+ *
+ *  The major interface functions include:
+ *
+ *   o. sc_init_scaner:
+ *       Initiaize the scaner (write down the beginning and ending location of
+ *       input json etc).
+ *
+ *   o. sc_get_token:
+ *       Return next token.
+ *
+ *   o. sc_rewind:
+ *       The retreat points back to the starting point of the token just
+ *       sucessfully recognized. This function is called when scaner
+ *       successfuly recognize the token, which is not what the parser expects.
+ *
+ * ****************************************************************************
+ */
 #ifndef SCANER_H
 #define SCANER_H
 
@@ -45,9 +77,9 @@ typedef struct {
     /* valid iff the token is a string */
     int32_t str_len;
 
-    /* How many chars in the input json string represent this token. In case of
-     * lexical problem, the span points to location (relative to the begnning
-     * of the token) where the problem occurs.
+    /* How many chars in the input json string representing this token. In
+     * the even of lexical problem, the span points to starting location where
+     * the problem occurs.
      */
     int32_t span;
 } token_t;
@@ -73,6 +105,7 @@ typedef struct {
     const char* err_msg;
 } scaner_t;
 
+/* Return 1 iff the "tk" is a primitive token */
 static inline int
 tk_is_primitive(const token_t* tk) {
     return ((uint32_t)tk->type) <= TT_LAST_PRIMITIVE;
@@ -80,6 +113,7 @@ tk_is_primitive(const token_t* tk) {
 
 void sc_init_scaner(scaner_t*, mempool_t*, const char* json, uint32_t json_len);
 
+/* NOTE: The str_end is equal to scaner_t::json_end.*/
 token_t* sc_get_token(scaner_t*, const char* str_end);
 
 /* Rewind the pointer back to beginning of token just successfully scaned.

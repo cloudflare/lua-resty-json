@@ -25,8 +25,8 @@ align_free_pointer(chunk_hdr_t* chunk_hdr, int align) {
     chunk_hdr->free = p;
 }
 
-/* Allocate a chunk which can accommodate object of given size. If size is not
- * specified (i.e. size = 0), default size is used.
+/* Allocate a chunk which can accommodate an object of given size. If size
+ * is not specified (i.e. size = 0), default size is used.
  */
 static chunk_hdr_t*
 alloc_chunk(int size) {
@@ -49,7 +49,9 @@ alloc_chunk(int size) {
     return chunk_hdr;
 }
 
-/* Allocate a new chunk to the mempool, return 1 on success, 0 otherwise */
+/* Allocate a new chunk and add it to the mempool, return 1 on success,
+ * 0 otherwise.
+ */
 static int
 add_a_chunk(mempool_t* mp, int size) {
     chunk_hdr_t* new_chunk = alloc_chunk(0);
@@ -83,6 +85,7 @@ mp_create() {
     return mp;
 }
 
+/* the slow-path of mp_alloc() */
 void*
 mp_alloc_slow(mempool_t* mp, int size) {
     if (unlikely(add_a_chunk(mp, size) == 0))
@@ -102,6 +105,7 @@ mp_destroy(mempool_t* mp) {
     free((void*)mp);
 }
 
+/* Free all blocks allocated so far */
 void
 mp_free_all(mempool_t* mp) {
     chunk_hdr_t* iter;

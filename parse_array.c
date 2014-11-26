@@ -30,7 +30,7 @@ typedef enum {
 
 static PAE_STATE
 parse_array_elmt(parser_t* parser, obj_composite_t* array_obj, token_t* tk) {
-    /* case 1: The token contains an primitive object */
+    /* case 1: The token contains a primitive object */
     if (tk_is_primitive(tk)) {
         if (emit_primitive_tk(parser->mempool, tk, array_obj))
             return PAE_DONE;
