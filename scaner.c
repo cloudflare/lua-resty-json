@@ -257,10 +257,93 @@ unknown_tk_handler(scaner_t* scaner, const char* str, const char* str_e) {
 }
 
 static int
-process_unicode_esc(char* c1, char* c2, const char* src) {
-    (void)c1 ; (void)c2; (void)src;
-    ASSERT(0 && "TBD");
-    return 0;
+utf8_get_val(const unsigned char* hex4) {
+    unsigned char c = *hex4++;
+    int hval = 0, value;
+
+    if (c >= '0' && c <= '9')
+        hval = c - '0';
+    else if ((c | 0x20) <= 'f') {
+        hval = (c | 0x20) - 'a' + 10;
+    } else {
+        return 0;
+    }
+    value = hval;
+
+    c = *hex4++;
+    if (c >= '0' && c <= '9')
+        hval = c - '0';
+    else if ((c | 0x20) <= 'f') {
+        hval = (c | 0x20) - 'a' + 10;
+    } else {
+        return 0;
+    }
+    value = (value << 4) | hval;
+
+    c = *hex4++;
+    if (c >= '0' && c <= '9')
+        hval = c - '0';
+    else if ((c | 0x20) <= 'f') {
+        hval = (c | 0x20) - 'a' + 10;
+    } else {
+        return 0;
+    }
+    value = (value << 4) | hval;
+
+    c = *hex4++;
+    if (c >= '0' && c <= '9')
+        hval = c - '0';
+    else if ((c | 0x20) <= 'f') {
+        hval = (c | 0x20) - 'a' + 10;
+    } else {
+        return 0;
+    }
+
+    value = (value << 4) | hval;
+    return value;
+}
+
+static int
+utf8_len(int val) {
+    if (val < 0x80)
+        return 1;
+
+    if (val < 0x800)
+        return 2;
+
+    if (val < 0x10000)
+        return 3;
+
+    return 4;
+}
+
+static void
+utf8_encode(char* buf, int value, int len) {
+    static unsigned char len_mark[] = {0, 0xc0, 0xe0, 0xf0 };
+    switch (len) {
+    case 4: *(buf + 3) = ((value | 0x80) & 0xbf); value >>= 6; /* fall through */
+    case 3: *(buf + 2) = ((value | 0x80) & 0xbf); value >>= 6; /* fall through */
+    case 2: *(buf + 1) = ((value | 0x80) & 0xbf); value >>= 6; /* fall through */
+    default: break;
+    }
+
+    *buf = value | len_mark[len - 1];
+}
+
+static int
+process_unicode_esc(const char* src, const char* src_end, char* dest, int* len) {
+    if (unlikely(src + 4 > src_end))
+        return 0;
+
+    int val = utf8_get_val((unsigned char*)src);
+    if (unlikely(val == 0))
+        return 0;
+
+    /* TODO: check UTF-16 surrogate */
+    int l = *len = utf8_len(val);
+    utf8_encode(dest, val, l);
+
+    return 1;
 }
 
 static token_t*
@@ -326,10 +409,10 @@ str_handler(scaner_t* scaner, const char* str, const char* str_e) {
 
             /* process unicode escape */
             if (esc_key == 'u') {
-                char c1, c2;
-                if (process_unicode_esc(&c1, &c2, src)) {
+                int len;
+                if (process_unicode_esc(src + 2, str_e, dest, &len)) {
                     src += sizeof("\\uffff") - 1;
-                    dest += 2;
+                    dest += len;
                     continue;
                 }
                 set_scan_err(scaner, esc, "unicode escape");

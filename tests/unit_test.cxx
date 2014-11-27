@@ -68,7 +68,7 @@ test_driver(const char* test_spec_file, const char* message,
             if (expect_fail) {
                 real_output = jp_get_err(parser);
             } else {
-                fprintf(stdout, "fail! jp_get_err() return NULL\n");
+                fprintf(stdout, "fail! %s\n", jp_get_err(parser));
                 fail_num++;
                 continue;
             }
