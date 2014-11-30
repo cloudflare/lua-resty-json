@@ -39,9 +39,18 @@ output: ["l\"ol"]
 input: [ "\"\\\/\b\f\n\r\t\"" ]
 output: ["\"\\\/\b\f\n\r\t\""]
 
-# unicode
+# \u escape
 input: [ "lo\u0026l"]
 output: ["lo&l"]
+
+input: ["\ud7ff"]
+output:["\ud7ff"]
+
+input: ["\ud800\udc12"]
+output:["\ud800\udc12"]
+
+input: ["leading-junk \ud800\udc12 trailing-junk"]
+output:["leading-junk \ud800\udc12 trailing-junk"]
 
 #-------------------------------------------------------------
 #

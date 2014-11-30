@@ -256,8 +256,25 @@ unknown_tk_handler(scaner_t* scaner, const char* str, const char* str_e) {
     return tk;
 }
 
-static int
-utf8_get_val(const unsigned char* hex4) {
+/* ***********************************************************************
+ *
+ *      Handle String
+ *
+ * ***********************************************************************
+ */
+
+/* The input "hex4" is a string with *four* leading hex-digits,
+ * this function is to convert them into an positive integer.
+ *
+ * For instance, given input hex4 being "aBc9...", the return value would
+ * be 0xabc9. Hexadecimal digits are case insensitive. If the leading
+ * four character include non-hex-digit, -1 is returned.
+ *
+ * NOTE: It's up to the caller to ensure the length of "hex4" is no less
+ *  than 4.
+ */
+static int32_t
+hex4_to_int(const char* hex4) {
     unsigned char c = *hex4++;
     int hval = 0, value;
 
@@ -266,7 +283,7 @@ utf8_get_val(const unsigned char* hex4) {
     else if ((c | 0x20) <= 'f') {
         hval = (c | 0x20) - 'a' + 10;
     } else {
-        return 0;
+        return -1;
     }
     value = hval;
 
@@ -276,7 +293,7 @@ utf8_get_val(const unsigned char* hex4) {
     else if ((c | 0x20) <= 'f') {
         hval = (c | 0x20) - 'a' + 10;
     } else {
-        return 0;
+        return -1;
     }
     value = (value << 4) | hval;
 
@@ -286,7 +303,7 @@ utf8_get_val(const unsigned char* hex4) {
     else if ((c | 0x20) <= 'f') {
         hval = (c | 0x20) - 'a' + 10;
     } else {
-        return 0;
+        return -1;
     }
     value = (value << 4) | hval;
 
@@ -296,53 +313,126 @@ utf8_get_val(const unsigned char* hex4) {
     else if ((c | 0x20) <= 'f') {
         hval = (c | 0x20) - 'a' + 10;
     } else {
-        return 0;
+        return -1;
     }
 
     value = (value << 4) | hval;
     return value;
 }
 
+/* determine the number of bytes needed to encode the given codepoint */
 static int
-utf8_len(int val) {
-    if (val < 0x80)
+utf8_encode_len(int codepoint) {
+    if (codepoint < 0x80)
         return 1;
 
-    if (val < 0x800)
+    if (codepoint < 0x800)
         return 2;
 
-    if (val < 0x10000)
+    if (codepoint < 0x10000)
         return 3;
 
     return 4;
 }
 
+/* Encode the given codepoint in a sequence of UTF-8s */
 static void
-utf8_encode(char* buf, int value, int len) {
+utf8_encode(char* buf, int codepoint, int len) {
     static unsigned char len_mark[] = {0, 0xc0, 0xe0, 0xf0 };
     switch (len) {
-    case 4: *(buf + 3) = ((value | 0x80) & 0xbf); value >>= 6; /* fall through */
-    case 3: *(buf + 2) = ((value | 0x80) & 0xbf); value >>= 6; /* fall through */
-    case 2: *(buf + 1) = ((value | 0x80) & 0xbf); value >>= 6; /* fall through */
+    case 4: *(buf + 3) = ((codepoint | 0x80) & 0xbf);
+        codepoint >>= 6;
+        /* fall through */
+
+    case 3: *(buf + 2) = ((codepoint | 0x80) & 0xbf);
+        codepoint >>= 6;
+        /* fall through */
+
+    case 2: *(buf + 1) = ((codepoint | 0x80) & 0xbf);
+        codepoint >>= 6;
+        /* fall through */
+
     default: break;
     }
 
-    *buf = value | len_mark[len - 1];
+    *buf = codepoint | len_mark[len - 1];
 }
 
+/* Process \u escape.
+ *
+ * The legal input string falls in one of the following two cases:
+ *   1. "\uzzzz", where the zzzz in (0, 0xD800] (Note zzzz > 0)
+ *   2. "\uxxxx\uyyyy", where the xxxx in [0xD800, 0xDBFF] yyyy in [DC00,DFFF].
+ *      i.e. the input string is a UTF-16 surrogate pair.
+ *
+ *  This function is to convert the input string to up to four UTF-8s and
+ * save them to "dest".
+ *
+ *   On success, return 1, and the "src_advance" and "dest_advance" is set to
+ * the amount of byte the source and the destination string need to advance,
+ * respectively. Otherwise, 0 is returned.
+ */
+static const char* illegal_u_esc = "Illegal \\u escape";
 static int
-process_unicode_esc(const char* src, const char* src_end, char* dest, int* len) {
-    if (unlikely(src + 4 > src_end))
+process_u_esc(scaner_t* scaner, const char* src, const char* src_end,
+              char* dest, int* src_advance, int* dest_advance) {
+    int32_t codepoint;
+
+    /* Step 1: get the codepoint */
+    if (unlikely(src + 6 > src_end))
         return 0;
 
-    int val = utf8_get_val((unsigned char*)src);
-    if (unlikely(val == 0))
+    codepoint = hex4_to_int(src + 2);
+    if (unlikely(!codepoint)) {
+        set_scan_err(scaner, src, illegal_u_esc);
         return 0;
+    }
 
-    /* TODO: check UTF-16 surrogate */
-    int l = *len = utf8_len(val);
-    utf8_encode(dest, val, l);
+    *src_advance = 6; /* skip the \\uxxxx, hence 6 */
 
+    /* Detect UTF-16 surrogate pair. The codepoint be in this form : 110110x...
+     */
+    if (codepoint >= 0xd800) {
+        int32_t codepoint_low;
+        const char* lower = src + 6;
+
+        if (codepoint & 0x400) {
+            set_scan_err(scaner, src, "Higher part of UTF-16 surrogate must "
+                                      "be in the range of [0xd800, 0xdbff]");
+            return 0;
+        }
+
+        if (unlikely(src + 12 > src_end) ||
+            unlikely(*(src + 6) != '\\') || unlikely(*(src + 7) != 'u')) {
+            set_scan_err(scaner, src + 6,
+                         "Expect \\u escape for lower part "
+                         "of UTF-16 surrogate");
+            return 0;
+        }
+
+        codepoint_low = hex4_to_int(lower + 2);
+        if (codepoint_low < 0) {
+            set_scan_err(scaner, lower, illegal_u_esc);
+            return 0;
+        }
+
+        if (unlikely(codepoint_low < 0xdc00) ||
+            unlikely(codepoint_low > 0xdfff)) {
+            set_scan_err(scaner, lower, "Lower part of UTF-16 surrogate must "
+                                        "be in the range of [0xdc00, 0xdfff]");
+        }
+
+        /* Extract the lower 10-bit from surrogate pairs, and concatenate
+         * them together.
+         */
+        codepoint = (codepoint_low & 0x3ff) | ((codepoint & 0x3ff) << 10);
+        codepoint |= 0x10000;
+
+        *src_advance = 12; /* skip the "\\uxxxx\\uyyyy", hence 12 */
+    }
+
+    /* Step 2: Encode the codepoint with UTF-8 sequence */
+    utf8_encode(dest, codepoint, *dest_advance = utf8_encode_len(codepoint));
     return 1;
 }
 
@@ -409,14 +499,13 @@ str_handler(scaner_t* scaner, const char* str, const char* str_e) {
 
             /* process unicode escape */
             if (esc_key == 'u') {
-                int len;
-                if (process_unicode_esc(src + 2, str_e, dest, &len)) {
-                    src += sizeof("\\uffff") - 1;
-                    dest += len;
+                int src_adv, dest_adv;
+                if (process_u_esc(scaner, src, str_e, dest,
+                                  &src_adv, &dest_adv)) {
+                    src += src_adv;
+                    dest += dest_adv;
                     continue;
                 }
-                set_scan_err(scaner, esc, "unicode escape");
-                return tk;
             }
 
             /* illegal escape */
@@ -518,6 +607,9 @@ sc_rewind (scaner_t* scaner) {
  */
 static void __attribute__((format(printf, 3, 4)))
 set_scan_err_fmt(scaner_t* scaner, const char* loc, const char* fmt, ...) {
+    if (scaner->err_msg)
+        return;
+
     token_t* tk = &scaner->token;
     tk->type = TT_ERR;
 
@@ -544,6 +636,9 @@ set_scan_err_fmt(scaner_t* scaner, const char* loc, const char* fmt, ...) {
 
 static void __attribute__((cold))
 set_scan_err(scaner_t* scaner, const char* loc, const char* str) {
+    if (scaner->err_msg)
+        return;
+
     if (!str) { str = unrecog_token; }
     set_scan_err_fmt(scaner, loc, "%s", str);
 }

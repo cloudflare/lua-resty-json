@@ -30,7 +30,7 @@ public:
 
 private:
     void dump_primitive(const obj_t*);
-    void dump_str(const obj_t*);
+    int dump_str(const obj_t*, bool dryrun=false);
     void dump_hashtab(const obj_t*);
     void dump_array(const obj_t*);
     void dump_obj(const obj_t*);
@@ -38,6 +38,8 @@ private:
     void resize(uint32_t min_remain_sz);
     void output_char(char);
     void append_str(const char* str, uint32_t str_len);
+
+    int get_utf8_codepoint(const char* utf8_seq, int len, int& seq_len);
 
 private:
     char* _buf;

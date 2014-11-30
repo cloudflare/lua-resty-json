@@ -53,57 +53,61 @@ JsonDumper::dump_primitive(const obj_t* the_obj) {
     append_str(buf, dump_len);
 }
 
-void
-JsonDumper::dump_str(const obj_t* str_obj) {
-    obj_primitive_t* obj = (obj_primitive_t*)(void*)str_obj;
-
-    // step 1: figure out
-    ASSERT(obj->obj_ty == OT_STR);
-
-    int buf_len = 2; // for two double-quotes.
-    {
-        const char* str = obj->str_val;
-        for (int i = 0, e = str_obj->str_len; i < e; i++) {
-            char c = str[i];
-            if (isprint(c)) {
-                buf_len ++;
-                if (c == '"' || c == '\\' || c == '/') buf_len ++;
-                continue;
-            }
-
-            if (c == '\b' || c == '\f' || c == '\r' ||
-                c == '\n' || c == '\t') {
-                buf_len += 2;
-                continue;
-            }
-
-            // output as \xHH
-            buf_len += 4;
-        }
+int
+JsonDumper::get_utf8_codepoint(const char* utf8_seq, int len, int& seq_real_len) {
+    /* step 1: determine the length of the sequence */
+    unsigned char c = *utf8_seq;
+    int codepoint = 0;
+    seq_real_len = 0;
+    if ((c & 0xf8) == 0xf0) {
+        seq_real_len = 4;
+        codepoint = c & 7;
+    } else if ((c & 0xf0) == 0xe0) {
+        seq_real_len = 3;
+        codepoint = c & 0xf;
+    } else if ((c & 0xe0) == 0xc0) {
+        seq_real_len = 2;
+        codepoint = c & 0x1f;
+    } else {
+        return -1;
     }
 
-    // step 2: make sure the buffer is big enough
-    resize( _content_len + buf_len);
+    /* Concatenate lower-6-bits of the following UTF8s */
+    for (int i = 1; i < seq_real_len; i++) {
+        codepoint = ((codepoint << 6) | (utf8_seq[i] & 0x3f));
+    }
 
-    // step 3: copy the string
-    {
-        const char* src = obj->str_val;
-        char *dest = _buf + _content_len;
+    return codepoint;
+}
 
-        *dest++ = '"';
-        for (int i = 0, e = str_obj->str_len; i < e; i++) {
-            char c = src[i];
-            if (isprint(c)) {
-                if (c == '"' || c == '\\' || c == '/') {
-                    *dest++ = '\\';
-                }
+int
+JsonDumper::dump_str(const obj_t* str_obj, bool dryrun) {
+    obj_primitive_t* obj = (obj_primitive_t*)(void*)str_obj;
 
-                *dest++ = c;
-                continue;
-            }
+    ASSERT(obj->obj_ty == OT_STR);
 
+    if (!dryrun) {
+        int len = dump_str(str_obj, true);
+        resize( _content_len + len);
+    }
+
+    char *dest = _buf + _content_len;
+    int len = 0;
+
+    /* print the opening quotion */
+    len++;
+    if (!dryrun) { *dest++ = '"'; }
+
+    const char* str = obj->str_val;
+    for (int i = 0, e = str_obj->str_len; i < e;) {
+        char c = str[i];
+        /* case 1: Print regular ASCII */
+        if ((c & 0x80) == 0) {
             char esc = 0;
             switch(c) {
+            case '/': esc = '/'; break;
+            case '\\': esc = '\\'; break;
+            case '"': esc = '"'; break;
             case '\b': esc = 'b'; break;
             case '\f': esc = 'f'; break;
             case '\r': esc = 'r'; break;
@@ -112,19 +116,64 @@ JsonDumper::dump_str(const obj_t* str_obj) {
             default: ;
             };
 
+            len++;
             if (esc) {
-                *dest++ = '\\';
-                *dest++ = esc;
-                continue;
+                len++;
+                if (!dryrun) { *dest++ = '\\'; *dest++ = esc; }
+            } else if (!dryrun) {
+                *dest++ = c;
             }
 
-            dest += snprintf(dest, 6, "\\x%02x", (uint32_t)c);
+            i++;
+            continue;
         }
-        *dest++ = '"';
-        *dest = '\0';
 
+        int seq_len;
+        int codepoint = get_utf8_codepoint(str + i, e - i, seq_len);
+        if (codepoint < 0) {
+            /* case 2: Something wrong with the UTF8 sequence. In this
+             *  case, we print a question-mark and move on.
+             */
+            len++;
+            if (!dryrun) { *dest++ = '?'; }
+
+            i++;
+            continue;
+        }
+
+        i += seq_len;
+
+        /* case 3: print utf16 surrogate pair */
+        if (codepoint >= 0x10000) {
+            int low = (codepoint & 0xffff) & 0x3ff;
+            int high = ((codepoint & 0xffff) >> 10) & 0x3ff;
+
+            low |= 0xdc00;
+            high |= 0xd800;
+
+            len += 12;
+            if (!dryrun) {
+                sprintf(dest, "\\u%04x\\u%04x", high, low);
+                dest += 12;
+            }
+            continue;
+        }
+
+        len += 6;
+        if (!dryrun) {
+            sprintf(dest, "\\u%04x", codepoint);
+            dest += 6;
+        }
+    }
+
+    /* print the closing quotion */
+    len ++;
+    if (!dryrun) {
+        *dest++ = '"';
         _content_len = dest - _buf;
     }
+
+    return len;
 }
 
 void
