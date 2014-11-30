@@ -1,7 +1,7 @@
 #ifndef PARSER_H
 #define PARSER_H
 
-#include "adt.h"
+//#include "adt.h"
 #include "mempool.h"
 #include "ljson_parser.h"
 #include "scaner.h"
@@ -58,17 +58,6 @@ composite_state_t* pstack_pop(parser_t*);
  ****************************************************************************
  */
 int emit_primitive_tk(mempool_t* mp, token_t* tk, obj_composite_t* nesting_obj);
-
-static inline int
-insert_primitive_subobj(mempool_t* mp, slist_t* subobj_list, obj_t* subobj) {
-    slist_elmt_t* subobj_elmt = MEMPOOL_ALLOC_TYPE(mp, slist_elmt_t);
-    if (unlikely(!subobj_elmt))
-        return 0;
-
-    subobj_elmt->ptr_val = subobj;
-    slist_prepend(subobj_list, subobj_elmt);
-    return 1;
-}
 
 void insert_subobj(obj_composite_t* nesting, obj_t* nested);
 

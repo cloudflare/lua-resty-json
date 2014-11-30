@@ -54,8 +54,8 @@
 #include <inttypes.h>
 #include <ctype.h>
 
+#include "util.h"
 #include "mempool.h"
-#include "adt.h"
 #include "scaner.h"
 #include "parser.h"
 

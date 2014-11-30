@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "util.h"
 #include "parser.h"
 
 static const char* syntax_err = "Array syntax error, expect ',' or ']'";
