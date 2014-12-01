@@ -10,6 +10,9 @@ PROGRAM = unit_test
 
 all : $(PROGRAM)
 	./$(PROGRAM)
+	@echo
+	@echo "Testing Lua wrapper..."
+	-luajit ./test.lua
 
 $(PROGRAM) : $(OBJ) ../libljson.so
 	$(CXX) $(OBJ) $(LDFLAGS) -o $@
