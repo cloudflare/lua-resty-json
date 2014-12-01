@@ -11,4 +11,14 @@ input: {"key":[3, 4, "5"], "key2":67}
 output:{"key":[3,4,"5"],"key2":67}
 
 input: {"key":[3, 4, "5"], "key2":{"key3":"value3"}}
-input: {"key":[3,4,"5"],"key2":{"key3":"value3"}}
+output: {"key":[3,4,"5"],"key2":{"key3":"value3"}}
+
+# test empty composite object
+input : []
+output: []
+
+input: {}
+output: {}
+
+input: [ {}]
+output: [{}]

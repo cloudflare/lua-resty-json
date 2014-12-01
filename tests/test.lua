@@ -57,10 +57,20 @@ end
 
 local json_parser = ljson_decoder.create()
 
+-- Test 1
 local input = [=[[1, 2, 3, {"key1":"value1", "key2":"value2"}, "lol"]]=]
 local output = {1, 2, 3, {["key1"] = "value1", ["key2"] = "value2" }, "lol"}
-
 ljson_test("test1", json_parser, input, output);
+
+-- Test 2
+input = [=[[]]=]
+output = {}
+ljson_test("test2", json_parser, input, output);
+
+-- Test 3
+input = [=[[{}]]=]
+output = {{}}
+ljson_test("test3", json_parser, input, output);
 
 io.write(string.format(
         "\n============================\nTotal test count %d, fail %d\n",
