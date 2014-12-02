@@ -140,15 +140,8 @@ local create_array
 local create_hashtab
 local convert_obj
 
-local cvt = { function(obj) return tonumber(obj.int_val) end,
-              function(obj) return tonumber(obj.db_val) end,
-              function(obj) return ffi_string(obj.str_val, obj.common.str_len) end,
-              function(obj) return obj.int_val == 0 and false or true end,
-              function(obj) return nil end }
-
 create_primitive = function(obj)
     local ty = obj.common.obj_ty
-    --return cvt[ty + 1](obj)
     if ty == ty_int64 then
         return tonumber(obj.int_val)
     elseif ty == ty_str then
@@ -242,7 +235,7 @@ convert_obj = function(obj, cobj_array)
     end
 end
 
-function _M.parse(parser_inst, json)
+function _M.decode(parser_inst, json)
     local objs = jp_parse(parser_inst, json, #json)
     if objs == nil then
         return nil, ffi.string(jp_get_err(parser_inst))

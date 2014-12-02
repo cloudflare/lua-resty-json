@@ -45,7 +45,7 @@ local test_total = 0;
 local function ljson_test(test_id, parser, input, expect)
     test_total = test_total + 1
     io.write(string.format("Testing %s ...", test_id))
-    local result = ljson_decoder.parse(parser, input)
+    local result = ljson_decoder.decode(parser, input)
     if cmp_lua_var(result, expect) then
         print("succ!")
     else

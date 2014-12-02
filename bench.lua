@@ -9,7 +9,7 @@ local instance = ljson_decoder.create()
 for line in f:lines() do
     local begin = os.clock()
     for i = 1, iter do
-        local result, err = ljson_decoder.parse(instance, line)
+        local result, err = ljson_decoder.decode(instance, line)
     end
 
     local t1 = os.clock() - begin
