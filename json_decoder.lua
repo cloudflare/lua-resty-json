@@ -64,7 +64,10 @@ local ffi_cast = ffi.cast
 local ffi_string = ffi.string
 
 local _M = {}
-local tab_new = require 'table.new'
+local ok, tab_new = pcall(require, "table.new")
+if not ok then
+    tab_new = function (narr, nrec) return {} end
+end
 
 local jp_lib = nil
 local jp_create = nil
@@ -93,7 +96,7 @@ local function find_shared_obj(cpath, so_name)
     end
 end
 
-function _M.load_json_parser()
+function load_json_parser()
     if jp_lib ~= nil then
         return jp_lib
     else
@@ -110,20 +113,6 @@ function _M.load_json_parser()
 end
 
 function _M.create()
-    if not jp_lib then
-        _M.load_json_parser()
-    end
-
-    if not jp_lib then
-        return nil, "fail to load libjson.so"
-    end
-
-    local parser_inst = jp_create()
-    if parser_inst ~= nil then
-        return ffi.gc(parser_inst, jp_destroy)
-    end
-
-    return nil, "Fail to create json paprser, likely due to OOM"
 end
 
 local ty_int64 = 0
@@ -226,7 +215,6 @@ end
 convert_obj = function(obj, cobj_array)
     local ty = obj.obj_ty
     if ty <= ty_last_primitive then
-        --return nil
         return create_primitive(ffi_cast(pobj_ptr_t, obj))
     elseif ty == ty_array then
         return create_array(ffi_cast(cobj_ptr_t, obj), cobj_array)
@@ -235,8 +223,73 @@ convert_obj = function(obj, cobj_array)
     end
 end
 
-function _M.decode(parser_inst, json)
-    local objs = jp_parse(parser_inst, json, #json)
+-- Create an array big enough to accommodate elmt_num + 2 elements.
+-- If cobj_vect is big enough, return it; otherwise, create a new one.
+local function create_cobj_vect(cobj_vect, elmt_num)
+    local array_size = elmt_num + 2
+    local cap = cobj_vect[0]
+    if cap < 400 and cap >= array_size then
+        return cobj_vect
+    end
+
+    cobj_vect = tab_new(array_size, 1)
+    cobj_vect[0] = array_size
+    return cobj_vect
+end
+
+-- set each element to be nil, such that they can be GC-ed ASAP.
+local function clean_cobj_vect(cobj_vect, elmt_num)
+    for iter = 1, elmt_num + 2 do
+        cobj_vect[iter] = nil
+    end
+end
+
+-- #########################################################################
+--
+--      "Export" functions
+--
+-- #########################################################################
+local setmetatable = setmetatable
+local mt = { __index = _M }
+
+function _M.new()
+    if not jp_lib then
+        load_json_parser()
+    end
+
+    if not jp_lib then
+        return nil, "fail to load libjson.so"
+    end
+
+    local parser_inst = jp_create()
+    if parser_inst ~= nil then
+        ffi.gc(parser_inst, jp_destroy)
+    else
+        return nil, "Fail to create JSON parser, likely due to OOM"
+    end
+
+    local cobj_vect = tab_new(100, 1)
+    if cobj_vect then
+        cobj_vect[0] = 100
+    else
+        return nil, "fail to create intermediate array"
+    end
+
+    local self = {
+        cobj_vect = cobj_vect,
+        parser = parser_inst
+    }
+
+    return setmetatable(self, mt)
+end
+
+function _M.decode(self, json)
+    --[[
+    if not self then
+        return nil, "JSON parser was not initialized properly"
+    end]]
+
+    local objs = jp_parse(self.parser, json, #json)
     if objs == nil then
         return nil, ffi.string(jp_get_err(parser_inst))
     end
@@ -247,7 +300,9 @@ function _M.decode(parser_inst, json)
     end
 
     local composite_objs = ffi_cast(cobj_ptr_t, objs)
-    local cobj_vect = tab_new(composite_objs.id + 2, 0)
+    local elmt_num = composite_objs.id
+    local cobj_vect = create_cobj_vect(self.cobj_vect, elmt_num)
+    self.cobj_vect = cobj_vect
 
     local last_val = nil
     repeat
@@ -255,9 +310,16 @@ function _M.decode(parser_inst, json)
         composite_objs = composite_objs.reverse_nesting_order
     until composite_objs == nil
 
+    clean_cobj_vect(cobj_vect, elmt_num)
+
     return last_val
 end
 
+-- #########################################################################
+--
+--      Debugging and Misc
+--
+-- #########################################################################
 local print_primitive
 local print_table
 local print_var
@@ -285,7 +347,6 @@ print_table = function(array)
     end
     io.write("}");
 end
-
 print_var = function(var)
     if type(var) == "table" then
         print_table(var)

@@ -2,7 +2,7 @@ package.cpath = package.cpath..";../?.so"
 package.path = package.cpath..";../?.lua"
 
 local ljson_decoder = require 'json_decoder'
-local f, err = io.open("../t2.json", "r")
+local decoder = ljson_decoder.new()
 
 local function cmp_lua_var(obj1, obj2)
     if type(obj1) ~= type(obj2) then
@@ -11,7 +11,7 @@ local function cmp_lua_var(obj1, obj2)
 
     if type(obj1) == "string" or
        type(obj1) == "number" or
-       type(obj1) == "ni" or
+       type(obj1) == "nil" or
        type(obj1) == "boolean" then
         return obj1 == obj2 and true or nil
     end
@@ -45,7 +45,7 @@ local test_total = 0;
 local function ljson_test(test_id, parser, input, expect)
     test_total = test_total + 1
     io.write(string.format("Testing %s ...", test_id))
-    local result = ljson_decoder.decode(parser, input)
+    local result = decoder:decode(input)
     if cmp_lua_var(result, expect) then
         print("succ!")
     else
@@ -71,6 +71,14 @@ ljson_test("test2", json_parser, input, output);
 input = [=[[{}]]=]
 output = {{}}
 ljson_test("test3", json_parser, input, output);
+
+input = [=[[null]]=]
+output = {nil}
+ljson_test("test4", json_parser, input, output);
+
+input = [=[[true, false]]=]
+output = {true, false}
+ljson_test("test5", json_parser, input, output);
 
 io.write(string.format(
         "\n============================\nTotal test count %d, fail %d\n",
