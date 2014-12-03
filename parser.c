@@ -59,6 +59,9 @@
 #include "scaner.h"
 #include "parser.h"
 
+#ifdef DEBUG
+static int verfiy_reverse_nesting_order(obj_t* parse_result);
+#endif
 /* **************************************************************************
  *
  *              About parse-stack.
@@ -189,8 +192,6 @@ emit_primitive_tk(mempool_t* mp, token_t* tk,
  */
 obj_t*
 parse(parser_t* parser, const char* json,  uint32_t json_len) {
-    ASSERT(pstack_empty(pstack));
-
     scaner_t* scaner = &parser->scaner;
     const char* json_end = scaner->json_end;
     pstack_init(parser);
@@ -302,6 +303,7 @@ jp_parse(struct json_parser* jp, const char* json, uint32_t len) {
     reset_parser(parser, json, len);
 
     obj_t* obj = parse(parser, json,  len);
+    ASSERT(verfiy_reverse_nesting_order(obj));
     return obj;
 }
 
@@ -496,3 +498,38 @@ jp_get_err(struct json_parser* p) {
     parser_t* parser = (parser_t*)(void*)p;
     return parser->err_msg;
 }
+
+#ifdef DEBUG
+static int
+verfiy_reverse_nesting_order(obj_t* parse_result) {
+    if (!parse_result)
+        return 1;
+
+    obj_ty_t type = parse_result->obj_ty;
+    if (type <= OT_LAST_PRIMITIVE)
+        return 0;
+
+    obj_composite_t* cobj = (obj_composite_t*)(void*)parse_result;
+
+    int obj_cnt = 1;
+
+    int first_id, last_id;
+    first_id = last_id = cobj->id;
+
+    /* loop over all composite-object in the the reverse-nesting order */
+    for (cobj = cobj->reverse_nesting_order;
+         cobj != 0;
+         cobj = cobj->reverse_nesting_order) {
+        if (cobj->id != last_id - 1)
+            return 0;
+
+        last_id = cobj->id;
+        obj_cnt++;
+    }
+
+    if (last_id != 1 || obj_cnt != first_id)
+        return 0;
+
+    return 1;
+}
+#endif
