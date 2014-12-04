@@ -84,4 +84,8 @@ io.write(string.format(
         "\n============================\nTotal test count %d, fail %d\n",
         test_total, test_fail_num))
 
---TODO: How to let luajit exit with non-zero if not all testing case pass.
+if test_fail_num == 0 then
+    os.exit(0)
+else
+    os.exit(1)
+end

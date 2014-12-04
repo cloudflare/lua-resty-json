@@ -67,6 +67,8 @@ end
 
 if fail_num == 0 then
     print("pass!")
+    os.exit(0)
 else
     print("Fail!")
+    os.exit(1)
 end
