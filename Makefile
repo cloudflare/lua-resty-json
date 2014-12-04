@@ -16,7 +16,8 @@ C_SO_NAME := libljson.so
 #
 #################################################################
 #
-CFLAGS := -Wall -O3 -flto -g -MMD -fPIC -fvisibility=hidden #-DDEBUG
+CFLAGS := -Wall -O3 -flto -g #-DDEBUG
+THE_CFLAGS := $(CFLAGS) -fPIC -MMD -fvisibility=hidden
 
 #################################################################
 #
@@ -42,14 +43,14 @@ all : $(C_SO_NAME) $(DEMO)
 -include dep.txt
 
 ${OBJ} : %.o : %.c
-	$(CC) $(CFLAGS) -DBUILDING_SO -c $<
+	$(CC) $(THE_CFLAGS) -DBUILDING_SO -c $<
 
 ${C_SO_NAME} : ${OBJ}
-	$(CC) $(CFLAGS) -DBUILDING_SO $^ -shared -o $@
+	$(CC) $(THE_CFLAGS) -DBUILDING_SO $^ -shared -o $@
 	cat *.d > dep.txt
 
 demo : ${C_SO_NAME} demo.o
-	$(CC) $(CFLAGS) -Wl,-rpath=./ demo.o -L. -lljson -o $@
+	$(CC) $(THE_CFLAGS) -Wl,-rpath=./ demo.o -L. -lljson -o $@
 
 test :
 	$(MAKE) -C tests
