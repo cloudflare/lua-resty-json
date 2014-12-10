@@ -14,10 +14,12 @@ local result, err = ljson_decoder.parse(instance, line)
 ```
 Performance
 -----------
-    As of I write this README.md, I compare this work against cjson using
+
+As of I write this README.md, I compare this work against cjson using
 few real-world json strings. For string-array intensive jsons. Our decoder
 is normally 30% - 50% ahead of cjson. While for the hash-table intensive
-input, we are only 10-30% better.
+input, we are only 10-30% better. The performance is measured with luajit
+2.1.
 
 TODO
 ----
