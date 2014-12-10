@@ -80,6 +80,10 @@ input = [=[[true, false]]=]
 output = {true, false}
 ljson_test("test5", json_parser, input, output);
 
+input = "-"  -- invalid input
+output = nil
+ljson_test("test6", json_parser, input, output);
+
 io.write(string.format(
         "\n============================\nTotal test count %d, fail %d\n",
         test_total, test_fail_num))

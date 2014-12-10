@@ -291,7 +291,7 @@ function _M.decode(self, json)
 
     local objs = jp_parse(self.parser, json, #json)
     if objs == nil then
-        return nil, ffi.string(jp_get_err(parser_inst))
+        return nil, ffi.string(jp_get_err(self.parser))
     end
 
     local ty = objs.obj_ty
