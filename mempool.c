@@ -54,7 +54,7 @@ alloc_chunk(int size) {
  */
 static int
 add_a_chunk(mempool_t* mp, int size) {
-    chunk_hdr_t* new_chunk = alloc_chunk(0);
+    chunk_hdr_t* new_chunk = alloc_chunk(size);
     if (!new_chunk)
         return 0;
 

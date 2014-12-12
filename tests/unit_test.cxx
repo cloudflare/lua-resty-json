@@ -102,6 +102,7 @@ int
 main(int argc, char** argv) {
     test_driver("test_spec/test_token.txt", "Scaner testing cases");
     test_driver("test_spec/test_composite.txt", "Test array/hashtab");
+    test_driver("test_spec/test_misc.txt", "Misc testing cases");
     test_driver("test_spec/test_diagnostic.txt", "Test diagnoistic information", true);
 
     fprintf(stdout,
