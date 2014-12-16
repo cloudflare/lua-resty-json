@@ -449,7 +449,19 @@ str_handler(scaner_t* scaner, const char* str, const char* str_e) {
             set_scan_err(scaner, str, "String does not end with quote");
             return tk;
         }
-    } while(*(str_quote - 1) == '\\');
+
+        if (likely(*(str_quote - 1) != '\\')) {
+            break;
+        } else {
+            /* Consider the cases like "Junk\\" */
+            const char* t = str_quote - 2;
+            int cnt = 1;
+            for (; *t == '\\'; t--, cnt++) {}
+            if ((cnt & 1) == 0) {
+                break;
+            }
+        }
+    } while(1);
 
     /* step 2: allocate space for the string. The new string has trailing
      * '\0' for easing purpose.

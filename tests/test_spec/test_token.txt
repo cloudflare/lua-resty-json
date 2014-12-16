@@ -52,6 +52,10 @@ output:["\ud800\udc12"]
 input: ["leading-junk \ud800\udc12 trailing-junk"]
 output:["leading-junk \ud800\udc12 trailing-junk"]
 
+# Scaner once mistakenly consider the closing quote in "xx\\" as a escaped quote
+input: ["xx\\", "xx\\\"yy", "xx\\\\\\"]
+output: ["xx\\","xx\\\"yy","xx\\\\\\"]
+
 #-------------------------------------------------------------
 #
 # !!!!!!!!! integer and floating point number !!!!!!!!
