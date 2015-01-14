@@ -4,7 +4,7 @@
 #
 #################################################################
 #
-SRC := mempool.c scaner.c parse_array.c parse_hashtab.c parser.c
+SRC := mempool.c scaner.c parse_array.c parse_hashtab.c parser.c scan_fp_strict.c scan_fp_relax.c
 OBJ := $(SRC:.c=.o)
 
 DEMO := demo
@@ -16,7 +16,7 @@ C_SO_NAME := libljson.so
 #
 #################################################################
 #
-CFLAGS := -Wall -O3 -flto -g #-DDEBUG
+CFLAGS := -Wall -O3 -flto -g -DFP_RELAX=0 #-DDEBUG
 THE_CFLAGS := $(CFLAGS) -fPIC -MMD -fvisibility=hidden
 
 #################################################################

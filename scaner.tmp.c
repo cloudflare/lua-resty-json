@@ -3,10 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h> /* for strtod() */
 #include <stdarg.h>
-#include <math.h> /* for the time being */
+
 #include "util.h"
 #include "scaner.h"
-#include "scan_fp.h"
 
 static const char* unrecog_token = "Unrecognizable token";
 
@@ -137,6 +136,212 @@ null_handler(scaner_t* scaner, const char* str, const char* str_e) {
     }
     return tk;
 }
+
+typedef union {
+    int64_t int_val;
+    double db_val;
+} int_db_union_t;
+
+/* Helper function of fp_handler(). It returns: 0 on failure, 1 if the value
+ * is of integer type, or 2 if the value of 'double' type. The value is
+ * returned via "result".
+ */
+#if 0
+static int
+scan_fp(const char** scan_str, const char* str_e, int_db_union_t* result) {
+    const char* str_save = *scan_str;
+    const char* str = *scan_str;
+
+    int is_negative = (*str == '-') ? 1 : 0;
+    str += is_negative;
+
+    /* More often than not, the number is of interger type that can fit in
+     * int64_t. So, we speculatively try to convert input string into
+     * an int64_t as we go along. In case it turns out to be a floating
+     * point number, or the interger is too big to fit in int64_t, we start
+     * over converting the string to "double"-typed value.
+     */
+    int64_t int_val = 0;
+
+    while (str < str_e) {
+        char c = *str;
+        if (isdigit(c)) {
+            int_val = int_val * 10 + (c - '0');
+            str++;
+        } else {
+            if (c != '.' && (c | 0x20) != 'e') {
+                if (str - str_save < 20) {
+                    /* It's guaranteed to fit in int64_t */
+                    if (!is_negative) {
+                        result->int_val = int_val;
+                    } else {
+                        result->int_val = - int_val;
+                    }
+                    *scan_str = str;
+                    return 1;
+                }
+            }
+
+            double d = strtod(str_save, (char**)scan_str);
+            if (*scan_str != str_save) {
+                result->db_val = d;
+                return 2;
+            }
+            return 0;
+        }
+    }
+    return 0;
+}
+#endif
+
+static double
+exp_factor(int exp, int negative) {
+    static const double exp_fact1[8] = {
+        1e1, 1e2, 1e4, 1e8, 1e16, 1e32, 1e64, 1e128
+    };
+
+    static const double exp_fact2[8] = {
+        1e-1, 1e-2, 1e-4, 1e-8, 1e-16, 1e-32, 1e-64, 1e-128
+    };
+
+    double val = 1;
+    const double* dbl_fact = negative ? exp_fact2 : exp_fact1;
+
+    int idx = 0;
+    while (exp) {
+        if (exp & 1) {
+            val *= dbl_fact[idx];
+        }
+        exp = exp >> 1;
+        idx++;
+    }
+
+    return val;
+}
+
+int
+scan_fp(const char** scan_ptr, const char* str_end, int_db_union_t* result) {
+    const char* str, *p;
+    str = p = *scan_ptr;
+    int negative = 0;
+
+    if (*p == '-') {
+        negative = 1;
+        p++;
+    }
+
+    int int_len = 0;
+    int64_t int_val = 0;
+
+    /* step 1: Calculate the integer part */
+    while (p < str_end) {
+        char c = *p;
+        int t = c - '0';
+        if (((unsigned)t) <= 9) {
+            int_val = int_val * 10 + t;
+            p++;
+        } else {
+            break;
+        }
+    }
+
+    int_len = p - str;
+    if (unlikely(p >= str_end) || unlikely(int_len >= 20)) {
+        /*The "len < 20" condition is to guaranteed the value fit in int64_t.*/
+        goto too_nasty;
+    }
+
+    char c = *p;
+    if (c != '.' && ((c | 0x20) != 'e')) {
+        result->int_val = negative ? - int_val : int_val;
+        *scan_ptr = p;
+        return 1;
+    }
+
+    /* step 2: Calculate the fraction part */
+    double frac = 0.0;
+    int frac_len = 0;
+    if (c == '.') {
+        const char* frac_start = ++p;
+        while (p < str_end) {
+            char c = *p;
+            int t = c - '0';
+
+            if (((unsigned)t) <= 9) {
+                frac = frac * 10 + t;
+                p++;
+            } else {
+                break;
+            }
+        }
+
+        frac_len = p - frac_start;
+        if (frac_len > 20) {
+            goto too_nasty;
+        }
+        frac = frac * exp_factor(frac_len, 1);
+    }
+
+    if (unlikely(p >= str_end)) {
+        /* The floating-point literal per se is nothing nasty. However, this
+         * condition implies that the literal is the last token of the json
+         * being processed, which is not correct.
+         */
+        goto too_nasty;
+    }
+
+    /* step 3: Calculate the exponent part */
+    double dbl_result = (double)int_val + frac;
+    if (negative)
+        dbl_result = - dbl_result;
+
+    c = *p;
+    int exp = 0;
+    if ((c | 0x20) == 'e') {
+        if (int_len != 1)
+            goto too_nasty;
+
+        int neg_exp = 0;
+        if (p < str_end && *p == '-') {
+            neg_exp = 1;
+            p++;
+        }
+
+        while (p < str_end) {
+            char c = *p;
+            if (isdigit(c)) {
+                exp = exp * 10 + c - '0';
+                /* HINT: max double = 1.797693E+308,
+                 * min-double = 2.225074E-308
+                 */
+                if (exp >= 308)
+                    goto too_nasty;
+                p++;
+            } else {
+                break;
+            }
+        }
+
+        dbl_result *= exp_factor(exp, neg_exp);
+    }
+    result->db_val = dbl_result;
+    *scan_ptr = p;
+    return 2;
+
+too_nasty:
+    {
+    fprintf(stderr, "too nasty!\n");
+    char* fp_end;
+    double d = strtod(str, &fp_end);
+    if (fp_end != str) {
+        result->db_val = d;
+        *scan_ptr = fp_end;
+        return 2;
+    }
+    }
+    return 0;
+}
+
 
 static token_t*
 fp_handler(scaner_t* scaner, const char* str, const char* str_e) {
