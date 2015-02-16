@@ -24,7 +24,7 @@ ifeq ($(OS), Darwin)
 	test -L ../libljson.so || ln -s libljson.dylib ../libljson.so
 	DYLD_LIBRARY_PATH=$$(DYLD_LIBRARY_PATH):.. ./$(PROGRAM) ./$(PROGRAM)
 else
-    ./$(PROGRAM)
+	./$(PROGRAM)
 endif
 	@echo
 	@echo "Testing Lua wrapper..."
