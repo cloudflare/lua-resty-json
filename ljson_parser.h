@@ -94,9 +94,14 @@ struct obj_composite_tag {
 struct json_parser;
 
 #ifdef BUILDING_SO
-#define LJP_EXPORT __attribute__ ((visibility ("protected")))
+    #ifndef __APPLE__
+        #define LJP_EXPORT __attribute__ ((visibility ("protected")))
+    #else
+        /* OSX does not support protect-visibility */
+        #define LJP_EXPORT __attribute__ ((visibility ("default")))
+    #endif
 #else
-#define LJP_EXPORT
+    #define LJP_EXPORT
 #endif
 
 /* **************************************************************************

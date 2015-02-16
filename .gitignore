@@ -1,8 +1,10 @@
 *.o
 *.d
 *.so
+*.dylib
 callgrind.*
 .gdb_history
 tags
 demo
 dep.txt
+tests/unit_test
