@@ -46,13 +46,13 @@ init_token_predict() {
     const char* np = "-0123456789";
     int idx, idx_e;
     for (idx = 0, idx_e = strlen(np); idx < idx_e; idx++) {
-        token_predict[(uint)np[idx]] = TT_FP;
+        token_predict[(uint8_t)np[idx]] = TT_FP;
     }
 
     /* Boolean predictor */
     const char* bp = "tTfF";
     for (idx = 0, idx_e = strlen(bp); idx < idx_e; idx++) {
-        token_predict[(uint)bp[idx]] = TT_BOOL;
+        token_predict[(uint8_t)bp[idx]] = TT_BOOL;
     }
 
     /* string predictor */
