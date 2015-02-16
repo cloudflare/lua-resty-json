@@ -1,5 +1,5 @@
 #ifndef UTIL_H
-#define UTIL_h
+#define UTIL_H
 
 #ifdef DEBUG
 #include <stdlib.h> /* for abort */
