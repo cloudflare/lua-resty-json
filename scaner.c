@@ -510,7 +510,7 @@ space_handler(scaner_t* scaner, const char* str_ptr, const char* str_end) {
         }
 
         lookahead = *str_ptr;
-        tt = (token_ty_t)token_predict[(uint32_t)lookahead];
+        tt = (token_ty_t)token_predict[(uint32_t)(uint8_t)lookahead];
         if (tt != TT_IS_SPACE)
             break;
     } while (1);
@@ -534,7 +534,7 @@ sc_get_token(scaner_t* scaner, const char* str_end) {
     }
 
     char lookahead = *str_ptr;
-    token_ty_t tt = (token_ty_t)token_predict[(uint32_t)lookahead];
+    token_ty_t tt = (token_ty_t)token_predict[(uint32_t)(uint8_t)lookahead];
     return token_handler[tt](scaner, str_ptr, str_end);
 }
 

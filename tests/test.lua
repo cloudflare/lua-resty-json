@@ -84,6 +84,16 @@ input = "-"  -- invalid input
 output = nil
 ljson_test("test6", json_parser, input, output);
 
+-- The input string is "[\0265]", where char \0265 is illegal. The json decoder
+-- once crash on this case.
+input = string.format("[%c]", 181)
+output = nil
+ljson_test("test7", json_parser, input, output);
+
+input = string.format("[ %c]", 181)
+output = nil
+ljson_test("test8", json_parser, input, output);
+
 io.write(string.format(
         "\n============================\nTotal test count %d, fail %d\n",
         test_total, test_fail_num))
