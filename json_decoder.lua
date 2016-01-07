@@ -83,7 +83,7 @@ local function find_shared_obj(cpath, so_name)
     local string_match = string.match
     local io_open = io.open
 
-    for k, _ in string_gmatch(cpath, "[^;]+") do
+    for k in string_gmatch(cpath, "[^;]+") do
         local so_path = string_match(k, "(.*/)")
         so_path = so_path .. so_name
 
