@@ -96,7 +96,7 @@ local function find_shared_obj(cpath, so_name)
     end
 end
 
-function load_json_parser()
+local function load_json_parser()
     if jp_lib ~= nil then
         return jp_lib
     else
