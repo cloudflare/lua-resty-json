@@ -69,11 +69,11 @@ if not ok then
     tab_new = function (narr, nrec) return {} end
 end
 
-local jp_lib = nil
-local jp_create = nil
-local jp_parse = nil
-local jp_get_err = nil
-local jp_destroy = nil
+local jp_lib
+local jp_create
+local jp_parse
+local jp_get_err
+local jp_destroy
 
 --[[ Find shared object file package.cpath, obviating the need of setting
    LD_LIBRARY_PATH
@@ -81,14 +81,15 @@ local jp_destroy = nil
 local function find_shared_obj(cpath, so_name)
     local string_gmatch = string.gmatch
     local string_match = string.match
+    local io_open = io.open
 
-    for k, v in string_gmatch(cpath, "[^;]+") do
+    for k in string_gmatch(cpath, "[^;]+") do
         local so_path = string_match(k, "(.*/)")
         so_path = so_path .. so_name
 
         -- Don't get me wrong, the only way to know if a file exist is trying
         -- to open it.
-        local f = io.open(so_path)
+        local f = io_open(so_path)
         if f ~= nil then
             io.close(f)
             return so_path
@@ -128,6 +129,7 @@ local create_primitive
 local create_array
 local create_hashtab
 local convert_obj
+local tonumber = tonumber
 
 create_primitive = function(obj)
     local ty = obj.common.obj_ty
@@ -158,7 +160,7 @@ create_array = function(array, cobj_array)
     for iter = 1, elmt_num do
         local elmt = elmt_list
 
-        local elmt_obj = nil
+        local elmt_obj
         if elmt.obj_ty <= ty_last_primitive then
             local err;
             elmt_obj, err = create_primitive(ffi_cast(pobj_ptr_t, elmt))
@@ -184,7 +186,7 @@ create_hashtab = function(hashtab, cobj_array)
     local elmt_list = hashtab.subobjs
 
     local result = tab_new(0, elmt_num / 2)
-    for iter = 1, elmt_num, 2 do
+    for _ = 1, elmt_num, 2 do
         local val = elmt_list
         elmt_list = elmt_list.next
 
@@ -291,7 +293,7 @@ function _M.decode(self, json)
 
     local objs = jp_parse(self.parser, json, #json)
     if objs == nil then
-        return nil, ffi.string(jp_get_err(self.parser))
+        return nil, ffi_string(jp_get_err(self.parser))
     end
 
     local ty = objs.obj_ty
@@ -304,7 +306,7 @@ function _M.decode(self, json)
     local cobj_vect = create_cobj_vect(self.cobj_vect, elmt_num)
     self.cobj_vect = cobj_vect
 
-    local last_val = nil
+    local last_val
     repeat
         last_val = convert_obj(ffi_cast(obj_ptr_t, composite_objs), cobj_vect)
         composite_objs = composite_objs.reverse_nesting_order
@@ -323,29 +325,35 @@ end
 local print_primitive
 local print_table
 local print_var
+local print = print
+local string_format = string.format
+local tostring = tostring
+local pairs = pairs
+local type = type
+local io_write = io.write
 
 print_primitive = function(luadata)
     if type(luadata) == "string" then
-        io.write(string.format("\"%s\"", luadata))
+        io_write(string_format("\"%s\"", luadata))
     else
-        io.write(tostring(luadata))
+        io_write(tostring(luadata))
     end
 end
 
 print_table = function(array)
-    io.write("{");
+    io_write("{");
     local elmt_num = 0
     for k, v in pairs(array) do
         if elmt_num > 0 then
-            io.write(", ")
+            io_write(", ")
         end
 
         print_primitive(k)
-        io.write(":")
+        io_write(":")
         print_var(v)
         elmt_num = elmt_num + 1
     end
-    io.write("}");
+    io_write("}");
 end
 print_var = function(var)
     if type(var) == "table" then
