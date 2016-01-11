@@ -70,10 +70,6 @@ if not ok then
 end
 
 local jp_lib
-local jp_create
-local jp_parse
-local jp_get_err
-local jp_destroy
 
 --[[ Find shared object file package.cpath, obviating the need of setting
    LD_LIBRARY_PATH
@@ -104,10 +100,6 @@ local function load_json_parser()
         local so_path = find_shared_obj(package.cpath, "libljson.so")
         if so_path ~= nil then
             jp_lib = ffi.load(so_path)
-            jp_create = jp_lib.jp_create
-            jp_parse = jp_lib.jp_parse
-            jp_get_err = jp_lib.jp_get_err
-            jp_destroy = jp_lib.jp_destroy
             return jp_lib
         end
     end
@@ -263,9 +255,9 @@ function _M.new()
         return nil, "fail to load libjson.so"
     end
 
-    local parser_inst = jp_create()
+    local parser_inst = jp_lib.jp_create()
     if parser_inst ~= nil then
-        ffi.gc(parser_inst, jp_destroy)
+        ffi.gc(parser_inst, jp_lib.jp_destroy)
     else
         return nil, "Fail to create JSON parser, likely due to OOM"
     end
@@ -291,9 +283,9 @@ function _M.decode(self, json)
         return nil, "JSON parser was not initialized properly"
     end]]
 
-    local objs = jp_parse(self.parser, json, #json)
+    local objs = jp_lib.jp_parse(self.parser, json, #json)
     if objs == nil then
-        return nil, ffi_string(jp_get_err(self.parser))
+        return nil, ffi_string(jp_lib.jp_get_err(self.parser))
     end
 
     local ty = objs.obj_ty
