@@ -148,6 +148,8 @@ create_array = function(array, cobj_array)
     local elmt_num = array.common.elmt_num
     local elmt_list = array.subobjs
 
+    -- HINT: The representation of an array-obj [e1, e2,..., en]
+    --   is en->...->e2->e1
     local result = tab_new(elmt_num, 0)
     for iter = 1, elmt_num do
         local elmt = elmt_list
@@ -177,6 +179,8 @@ create_hashtab = function(hashtab, cobj_array)
     local elmt_num = hashtab.common.elmt_num
     local elmt_list = hashtab.subobjs
 
+    -- HINT: The representation of a hash-obj {k1,v1,...,kn:vn}
+    --   is vn->kn->...->v1->k1.
     local result = tab_new(0, elmt_num / 2)
     for _ = 1, elmt_num, 2 do
         local val = elmt_list

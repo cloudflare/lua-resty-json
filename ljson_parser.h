@@ -5,30 +5,23 @@
  * return value. The return value of the jp_parse() is a singly-linked list
  * of composite objects chained together in a reverse-nesting order.
  *
- *   Use the same runing example we use in parser.c. Suppose the the input
- * json is: [1, 2, {"key": 3.4}]. Let object Obj2 be {"key":...}, and Obj1 be
- * [1,2,O2]. The return-value would be:
+ *   Use the same runing example we use in parser.c. Suppose the input json
+ * is: [1, 2, {"key": 3.4}]. Let object Obj2 be {"key": 3.4}, and Obj1 be
+ * [1, 2, Obj2]. The return-value would be:
  *
- *    -------------------------------------------------------------------
- *     Obj2 -> Obj1. (linked via obj_primitive_t::common::next)
- *     The content of Obj1 is: 3.4->"key"
- *            (linked via obj_t::next. the "content" of a composite object
- *             is pointed by obj_primitive_t::subobjs), and
- *     The content of Ojb2 is Obj1->2->1.
+ *     Obj2 -> Obj1. (linked via obj_composite_t::reverse_nesting_order)
  *
- *    --------------------------------------------------------------------
+ *   Note that the out-most composite object, in this case, the array Obj1,
+ * is at the end of the resulting list. The rationale for reverse-nesting
+ * order is that re-consturcting the nesting relationship can be done
+ * simply by iterating the list only once.
  *
- * Note that the out-most composite object, i.e the array Obj1 is at the
- * end of the list. The rationale for reverse-nesting order is that
- * re-consturcting the nesting relationship is as trivial as iterating
- * the list once.
- *
- *  The elements of each composite object is linked by a singly-linked list,
- * and again, in reverse order. In this case: Obj2's content would be:
- *  3.4 -> "key", while the Obj1's content would be: Obj2 -> 2 -> 1. While
- * the reverse order makes it bit awkward for callers, it improves the parser
- * the efficiency -- when parser succesfully recognizes an element, it simply
- * *prepend* (not append) the element to the element list.
+ *    The elements of a composite object is pointed by obj_composite_t::subobjs.
+ * Again, the order of the elements is *reversed* as well. In general, if
+ * the original JSON object is an array {e1, e2, ..., en}; the representation
+ * of the array is list: en->...,->e2->e1; if the original JSON object is a
+ * hash-table { k1:v1, k2:v2, ..., kn:vn}, the representation would be
+ * vn->kn->....->v2->k2->v1->k1
  *
  * **************************************************************************
  **/
