@@ -359,7 +359,7 @@ function _M.get_strings(self, json)
     end
 
     -- step 3: collect all strings
-    local str_array = tab_new(1, str_count)
+    local str_array = tab_new(str_count, 1)
     composite_objs = ffi_cast(cobj_ptr_t, objs)
     local idx = 1
 
