@@ -22,3 +22,6 @@ output: (line:1,col:16) Expect \u escape for lower part of UTF-16 surrogate
 
 input: ["\udc00"]
 output: (line:1,col:10) Higher part of UTF-16 surrogate must be in the range of [0xd800, 0xdbff]
+
+input: ["\u",""]
+output: (line:1,col:10) illegal escape \u
