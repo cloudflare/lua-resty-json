@@ -25,3 +25,6 @@ output: (line:1,col:10) Higher part of UTF-16 surrogate must be in the range of 
 
 input: ["\u",""]
 output: (line:1,col:10) illegal escape \u
+
+input: {"\uE330\uE330": ["
+output: (line:1,col:16) Lower part of UTF-16 surrogate must be in the range of [0xdc00, 0xdfff]

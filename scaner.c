@@ -366,6 +366,7 @@ process_u_esc(scaner_t* scaner, const char* src, const char* src_end,
             unlikely(codepoint_low > 0xdfff)) {
             set_scan_err(scaner, lower, "Lower part of UTF-16 surrogate must "
                                         "be in the range of [0xdc00, 0xdfff]");
+            return 0;
         }
 
         /* Extract the lower 10-bit from surrogate pairs, and concatenate
