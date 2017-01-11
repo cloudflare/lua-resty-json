@@ -24,7 +24,11 @@ endif
 #################################################################
 #
 CFLAGS := -Wall -O3 -flto -g -DFP_RELAX=0 #-DDEBUG
-THE_CFLAGS := $(CFLAGS) -fPIC -MMD -fvisibility=hidden
+THE_CFLAGS := $(CFLAGS) -fPIC -Wl,--build-id -MMD -fvisibility=hidden
+
+ifeq ($(OS), Linux)
+    THE_CFLAGS := $(THE_CFLAGS) -Wl,--build-id
+endif
 
 #################################################################
 #
