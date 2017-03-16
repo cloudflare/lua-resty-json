@@ -66,7 +66,7 @@ demo : ${C_SO_NAME} demo.o
 test :
 	$(MAKE) -C tests
 
-clean:; rm -f *.o *.so a.out *.d dep.txt
+clean:; rm -f *.o *.so a.out *.d dep.txt demo
 
 install:
 	install -D -m 755 $(C_SO_NAME) $(DESTDIR)/$(SO_TARGET_DIR)/$(C_SO_NAME)

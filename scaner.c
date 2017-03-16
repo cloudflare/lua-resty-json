@@ -226,7 +226,7 @@ hex4_to_int(const char* hex4) {
 
     if (c >= '0' && c <= '9')
         hval = c - '0';
-    else if ((c | 0x20) <= 'f') {
+    else if ((c | 0x20) >= 'a' && (c | 0x20) <= 'f') {
         hval = (c | 0x20) - 'a' + 10;
     } else {
         return -1;
@@ -236,7 +236,7 @@ hex4_to_int(const char* hex4) {
     c = *hex4++;
     if (c >= '0' && c <= '9')
         hval = c - '0';
-    else if ((c | 0x20) <= 'f') {
+    else if ((c | 0x20) >= 'a' && (c | 0x20) <= 'f') {
         hval = (c | 0x20) - 'a' + 10;
     } else {
         return -1;
@@ -246,7 +246,7 @@ hex4_to_int(const char* hex4) {
     c = *hex4++;
     if (c >= '0' && c <= '9')
         hval = c - '0';
-    else if ((c | 0x20) <= 'f') {
+    else if ((c | 0x20) >= 'a' && (c | 0x20) <= 'f') {
         hval = (c | 0x20) - 'a' + 10;
     } else {
         return -1;
@@ -256,7 +256,7 @@ hex4_to_int(const char* hex4) {
     c = *hex4++;
     if (c >= '0' && c <= '9')
         hval = c - '0';
-    else if ((c | 0x20) <= 'f') {
+    else if ((c | 0x20) >= 'a' && (c | 0x20) <= 'f') {
         hval = (c | 0x20) - 'a' + 10;
     } else {
         return -1;
@@ -329,7 +329,7 @@ process_u_esc(scaner_t* scaner, const char* src, const char* src_end,
         return 0;
 
     codepoint = hex4_to_int(src + 2);
-    if (unlikely(!codepoint)) {
+    if (unlikely(codepoint < 0)) {
         set_scan_err(scaner, src, illegal_u_esc);
         return 0;
     }
@@ -366,6 +366,7 @@ process_u_esc(scaner_t* scaner, const char* src, const char* src_end,
             unlikely(codepoint_low > 0xdfff)) {
             set_scan_err(scaner, lower, "Lower part of UTF-16 surrogate must "
                                         "be in the range of [0xdc00, 0xdfff]");
+            return 0;
         }
 
         /* Extract the lower 10-bit from surrogate pairs, and concatenate
@@ -458,7 +459,7 @@ str_handler(scaner_t* scaner, const char* str, const char* str_e) {
             /* process unicode escape */
             if (esc_key == 'u') {
                 int src_adv, dest_adv;
-                if (process_u_esc(scaner, src, str_e, dest,
+                if (process_u_esc(scaner, src, str_quote, dest,
                                   &src_adv, &dest_adv)) {
                     src += src_adv;
                     dest += dest_adv;

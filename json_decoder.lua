@@ -313,6 +313,79 @@ function _M.decode(self, json)
     return last_val
 end
 
+-- return:
+--  1). array of strings in the input JSON
+--  2). error message if error occur
+--
+--  1) could be nil if no string at all is found, if 1) is non-nil
+--     element with index 0 is the size of the array
+--
+function _M.get_strings(self, json)
+
+    -- step 1: decode the input JSON
+    local objs = jp_lib.jp_parse(self.parser, json, #json)
+    if objs == nil then
+        return nil, ffi_string(jp_lib.jp_get_err(self.parser))
+    end
+
+    local ty = objs.obj_ty
+    if ty <= ty_last_primitive then
+        -- The enclosing object must be either a hashtab or array
+        return nil, "malformed JSON"
+    end
+
+    local composite_objs = ffi_cast(cobj_ptr_t, objs)
+    local str_count = 0
+
+    -- step 2: count the number of strings
+    repeat
+        local elmt_num = composite_objs.common.elmt_num
+        local elmt_list = composite_objs.subobjs
+
+        -- go through all element
+        for iter = 1, elmt_num do
+            local elmt = elmt_list
+            elmt_list = elmt_list.next
+
+            if elmt.obj_ty == ty_str then
+                str_count = str_count + 1
+            end
+        end
+        composite_objs = composite_objs.reverse_nesting_order
+    until composite_objs == nil
+
+    if str_count == 0 then
+        return
+    end
+
+    -- step 3: collect all strings
+    local str_array = tab_new(str_count, 1)
+    composite_objs = ffi_cast(cobj_ptr_t, objs)
+    local idx = 1
+
+    repeat
+        local elmt_num = composite_objs.common.elmt_num
+        local elmt_list = composite_objs.subobjs
+
+        -- go through all elements
+        for iter = 1, elmt_num do
+            local elmt = elmt_list
+            elmt_list = elmt_list.next
+
+            if elmt.obj_ty == ty_str then
+                elmt = ffi_cast(pobj_ptr_t, elmt)
+                str_array[idx] = ffi_string(elmt.str_val, elmt.common.str_len)
+                idx = idx + 1
+            end
+        end
+        composite_objs = composite_objs.reverse_nesting_order
+    until composite_objs == nil
+
+    str_array[0] = str_count;
+
+    return str_array
+end
+
 -- #########################################################################
 --
 --      Debugging and Misc

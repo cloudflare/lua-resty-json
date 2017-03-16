@@ -28,14 +28,21 @@ char* load_json(const char* file_path, size_t* len) {
         exit(1);
     }
 
-    char* json_in_mem = (char*)mmap(0, file_len, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (json_in_mem == MAP_FAILED) {
-        perror("mmap");
+    char *payload = malloc(file_len);
+    if (payload == NULL) {
+        perror("malloc");
         exit(1);
     }
 
+    if (read(fd, payload, file_len) != file_len) {
+        perror("read");
+        exit(1);
+    }
+
+    close(fd);
+
     *len = file_len;
-    return json_in_mem;
+    return payload;
 }
 
 int
@@ -56,8 +63,13 @@ main (int argc, char** argv) {
 
 #if 1
     int i = 0;
+    int ret = 0;
     for (; i < 10000; i++) {
-     (void)jp_parse(jp, json, len);
+        if (jp_parse(jp, json, len) == NULL) {
+            ret = 1;
+            fprintf(stderr, "parsing failed: %s\n", jp_get_err(jp));
+            break;
+        }
     }
 #else
     obj_t* obj = jp_parse(jp, json, len);
@@ -68,5 +80,6 @@ main (int argc, char** argv) {
     }
 #endif
     jp_destroy(jp);
-    return 0;
+    free(json);
+    return ret;
 }
