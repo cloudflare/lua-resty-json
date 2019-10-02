@@ -338,10 +338,9 @@ process_u_esc(scaner_t* scaner, const char* src, const char* src_end,
 
     /* Detect UTF-16 surrogate pair. The codepoint be in this form : 110110x...
      */
-    if (codepoint >= 0xd800) {
+    if (codepoint >= 0xd800 && (codepoint < 0xe000 || codepoint > 0xffff)) {
         int32_t codepoint_low;
         const char* lower = src + 6;
-
         if (codepoint & 0x400) {
             set_scan_err(scaner, src, "Higher part of UTF-16 surrogate must "
                                       "be in the range of [0xd800, 0xdbff]");
