@@ -485,11 +485,11 @@ dump_obj(FILE* f, obj_t* obj) {
     if (type <= OT_LAST_PRIMITIVE) {
         dump_primitive_obj(f, obj);
         fputc('\n', f);
-    }
-
-    obj_composite_t* cobj = (obj_composite_t*)(void*)obj;
-    for (; cobj; cobj = cobj->reverse_nesting_order) {
-        dump_composite_obj(f, cobj);
+    } else {
+        obj_composite_t* cobj = (obj_composite_t*)(void*)obj;
+        for (; cobj; cobj = cobj->reverse_nesting_order) {
+            dump_composite_obj(f, cobj);
+        }
     }
 }
 
